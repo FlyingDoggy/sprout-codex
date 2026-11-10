@@ -1,0 +1,28 @@
+{
+  "name": "sprout-codex",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "小苗 for Codex: a local usage dashboard and pixel companion",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "test:codex": "node scripts/check-codex-plugin.mjs",
+    "start": "node dist/cli.js serve",
+    "mcp": "node dist/cli.js mcp",
+    "status": "node dist/cli.js status"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@modelcontextprotocol/ext-apps": "2.0.4",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,3 +1,5 @@
+> **Codex 适配版：** 本 fork 新增 [小苗 · Codex](mods/sprout-codex/README.md)，包含本机用量看板和 MCP App。Node.js 22+ 可直接运行 `node mods/sprout-codex/dist/cli.js serve`。下面保留上游 Claude 配置说明；使用 Codex 版无需运行根目录的 bootstrap 脚本。
+
 [English](README.md) | 中文
 
 <p align="center">

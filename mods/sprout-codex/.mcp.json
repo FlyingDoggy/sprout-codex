@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "sprout": {
+      "command": "node",
+      "args": ["./dist/cli.js", "mcp"],
+      "cwd": ".",
+      "startup_timeout_sec": 20,
+      "tool_timeout_sec": 180
+    }
+  }
+}

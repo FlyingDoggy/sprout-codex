@@ -1,0 +1,14 @@
+{
+  "name": "sprout-codex",
+  "version": "0.1.0",
+  "requires_local_executor": true,
+  "description": "小苗：Codex 本机用量、订阅额度、GitHub 贡献和像素宠物。",
+  "interface": {
+    "displayName": "小苗 · Codex",
+    "shortDescription": "用量、额度与像素宠物",
+    "developerName": "Muyu",
+    "defaultPrompt": "打开小苗，看看我的 Codex 用量和额度。"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

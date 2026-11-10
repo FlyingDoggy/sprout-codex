@@ -48,3 +48,15 @@ __pycache__/
 
 # The engine writes these types when it loads a mod; must come after the !mods/** allow-list.
 mods/**/.claude-plugin/types/
+
+# Codex port sources, without local dependencies, builds, or usage data.
+!.agents/
+!.agents/plugins/
+!.agents/plugins/marketplace.json
+!.github/
+!.github/workflows/
+!.github/workflows/sprout-codex.yml
+mods/sprout-codex/node_modules/
+mods/sprout-codex/dist/*.map
+mods/sprout-codex/work/
+mods/sprout-codex/*.log

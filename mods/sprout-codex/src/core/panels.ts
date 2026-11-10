@@ -184,8 +184,8 @@ export function tilesSvg(input: TilesInput) {
     : ''
 
   return `${svgOpen(W, H)}<style>${paletteCss(id)}
-.num-${id}{fill:#ececec;font-size:20px;font-weight:500}@media (prefers-color-scheme: light){.num-${id}{fill:#1f1e1d}}
-.today-${id},.on-${id}{fill:#D97757}.clay-${id}{fill:#E8906F}@media (prefers-color-scheme: light){.clay-${id}{fill:#B4532F}}${intro}
+.num-${id}{fill:#ececec;font-size:20px;font-weight:600}@media (prefers-color-scheme: light){.num-${id}{fill:#1f1e1d}}
+.t2-${id}{font-weight:500}.today-${id},.on-${id}{fill:#D97757}.clay-${id}{fill:#E8906F}@media (prefers-color-scheme: light){.clay-${id}{fill:#B4532F}}${intro}
 ${todayCss(id)}
 </style><defs><linearGradient id="rg-${id}" x1="0" x2="1"><stop offset="0" stop-color="#F0997B"/><stop offset="1" stop-color="#D97757"/></linearGradient>${clips.join('')}</defs>${body}</svg>`
 }

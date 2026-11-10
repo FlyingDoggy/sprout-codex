@@ -27,6 +27,36 @@ function svg(value: string | null | { svg: string }) {
   return text.replaceAll('@media (prefers-color-scheme: light)', theme === 'light' ? '@media all' : '@media not all')
 }
 
+function updatePanel(markup: string) {
+  const template = document.createElement('template')
+  template.innerHTML = markup
+  const next = template.content.querySelector('main')!
+  const current = root.querySelector('main')
+  if (!current?.querySelector('.range')) { root.replaceChildren(template.content); return }
+  const key = (element: Element) => element.querySelector('.range') ? 'stats' : element.tagName === 'SECTION' ? element.querySelector('h2')?.textContent : `${element.tagName}.${element.className}`
+  const old = new Map([...current.children].map(element => [key(element), element]))
+  let cursor = current.firstElementChild
+  for (const element of [...next.children]) {
+    const previous = old.get(key(element))
+    let kept = element
+    if (previous) {
+      if (previous !== cursor) current.insertBefore(previous, cursor)
+      if (key(element) === 'stats') {
+        // Keep the actual controls mounted: clicking or refreshing must not drop :hover/focus.
+        previous.querySelector('h2')!.textContent = element.querySelector('h2')!.textContent
+        previous.querySelector('.chart')!.replaceWith(element.querySelector('.chart')!)
+        for (const button of previous.querySelectorAll('.range button')) {
+          button.setAttribute('aria-pressed', element.querySelector(`#${button.id}`)!.getAttribute('aria-pressed')!)
+        }
+        kept = previous
+      } else if (previous.outerHTML === element.outerHTML) kept = previous
+      else previous.replaceWith(element)
+    } else current.insertBefore(element, cursor)
+    cursor = kept.nextElementSibling
+  }
+  while (cursor) { const next = cursor.nextElementSibling; cursor.remove(); cursor = next }
+}
+
 function quotaText(w: QuotaWindow, d: Dashboard) {
   const label = w.windowMinutes === 300 ? '5 小时' : w.windowMinutes === 10080 ? '本周' : w.label
   const clock = (at: number) => new Intl.DateTimeFormat('zh-CN', { timeZone: d.timezone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at)
@@ -78,7 +108,7 @@ function render() {
   const costText = cost !== null ? formatUsd(cost) : knownCost ? `≥${formatUsd(knownCost)}` : '—'
   const section = (heading: string, right: string, body: string) => `<section><div class="section-head"><h2>${heading}</h2>${right}</div>${body}</section>`
   const chart = (source: string | null | { svg: string }, label: string) => `<div class="chart" role="img" aria-label="${esc(label)}">${svg(source)}</div>`
-  root.innerHTML = `<main>
+  updatePanel(`<main>
     <header><span class="dot" aria-hidden="true"></span><h1>小苗</h1><button class="refresh" id="refresh" title="${time(d.updatedAt)} 更新 · 点击刷新" aria-label="刷新" ${busy ? 'disabled' : ''}>Codex</button></header>
     ${d.demo ? '<p class="note demo">演示</p>' : ''}
     <div class="companion">
@@ -92,7 +122,7 @@ function render() {
     ${mergeTotal ? section('每日合并', `<span class="note">${mergeDays.length} 天 ${mergeTotal} 个 PR${gh?.mergesComplete ? '' : '（部分）'}</span>`, chart(mergesSvg(width, mergeDays, isIntro), '每日合并 PR 和增删行数')) : ''}
     ${first ? section('Codex 使用', `<span class="note">${dayNumber(d.today) - dayNumber(first) + 1} 天里用了 ${d.usage.days.filter(day => day.total > 0 && day.day <= d.today).length} 天</span>`, chart(usageHeatmapSvg(width, allDays, first, d.today, isIntro), 'Codex 使用热力图')) : ''}
     ${gh?.days.length ? section('GitHub 贡献', `<span class="note">过去一年 ${gh.total.toLocaleString()} 次</span>`, chart(githubHeatmapSvg(width, gh.days[0].day, gh.days.map(day => day.level).join(''), d.today, isIntro), 'GitHub 贡献热力图')) : ''}
-  </main>`
+  </main>`)
   if (focus) document.getElementById(focus)?.focus({ preventScroll: true })
 }
 
@@ -141,7 +171,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
 
 async function start() {
   if (embedded) {
-    app = new App({ name: 'Sprout Codex', version: '0.3.0' }, {})
+    app = new App({ name: 'Sprout Codex', version: '0.3.1' }, {})
     app.ontoolresult = result => { const data = result.structuredContent as Dashboard | undefined; if (data?.version === 1) { dashboard = data; render() } }
     app.onhostcontextchanged = context => { if (context.theme) { theme = context.theme; document.documentElement.dataset.theme = theme; render() } }
     await app.connect()

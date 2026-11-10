@@ -6,7 +6,7 @@ The pixel character, growth levels, scene drawing, forecasting helpers and SVG c
 - `src/types/index.ts` keeps the upstream data types without the Claude runtime module augmentation.
 - `src/core/i18n.ts` replaces the Claude settings adapter with a host-independent language selector.
 - `src/core/lines.ts` copies upstream's full bilingual quip pools, with product names adapted to Codex/OpenAI and the exhausted-quota wording generalized.
-- `src/core/companion.ts` adapts upstream's context, mood, line selection and interaction state. The single-column UI follows `hooks/register.tsx`; `panels.ts` additionally supports unknown and partial prices.
+- `src/core/companion.ts` adapts upstream's context, mood, line selection and interaction state. The single-column UI follows `hooks/register.tsx`; `panels.ts` additionally supports unknown and partial prices and adjusts label/numeral weights for the Codex renderer.
 - Codex collection, persistence, transport, UI host adapter, packaging and tests are implemented in this fork.
 
 Upstream: https://github.com/QingqiShi/claude/tree/main/mods/sprout

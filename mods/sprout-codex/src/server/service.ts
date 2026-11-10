@@ -12,6 +12,9 @@ import { getQuota } from './codex'
 import { readGithub } from './github'
 import { readJson, writeJson } from './storage'
 import { loadPrices } from './pricing'
+import { DialogueEngine } from './dialogue'
+import { listPersonalities } from './personality-config'
+import { personalityCommand } from './personality-cli'
 
 export type Options = { codexHome: string; dataDir: string; timezone: string; binary: string; live: boolean; github: boolean; prices: Prices; refreshPrices?: boolean }
 export function optionsFromEnv(): Options {
@@ -49,12 +52,13 @@ export class SproutService {
   private github?: { at: number; value: GithubData | null; status: string | null }
   private prices?: { at: number; value: Awaited<ReturnType<typeof loadPrices>> }
   private activityStates: ActivityState[] = []
-  constructor(readonly options: Options) {}
+  private dialogue: DialogueEngine
+  constructor(readonly options: Options) { this.dialogue = new DialogueEngine(options.dataDir) }
 
-  private contextual(data: Dashboard, context: PanelContext): Dashboard {
+  private async contextual(data: Dashboard, context: PanelContext): Promise<Dashboard> {
     const own = context.threadId ? this.activityStates.filter(s => s.session === context.threadId).sort((a,b) => b.updatedAt-a.updatedAt)[0] : undefined
-    return { ...data, context, projectName: folderName(own?.cwd || context.cwd),
-      activity: context.threadId ? activityOf(threadActivity(this.activityStates, context.threadId)) : data.activity }
+    return this.dialogue.decorate({ ...data, context, projectName: folderName(own?.cwd || context.cwd), task:own?.task,
+      activity: context.threadId ? activityOf(threadActivity(this.activityStates, context.threadId)) : data.activity })
   }
 
   async get(force = false, context: PanelContext = {}): Promise<Dashboard> {
@@ -65,6 +69,13 @@ export class SproutService {
     }
     this.collecting = this.collect()
     try { this.snapshot = await this.collecting; return this.contextual(this.snapshot, context) } finally { this.collecting = undefined }
+  }
+
+  async personalities() { return listPersonalities(this.options.dataDir) }
+
+  async selectPersonality(id: string, context: PanelContext = {}) {
+    await personalityCommand(this.options.dataDir, ['use', id])
+    return this.get(false, context)
   }
 
   private async collect(): Promise<Dashboard> {
@@ -126,7 +137,7 @@ export class SproutService {
   }
 
   async interact(action: PetAction, context: PanelContext = {}): Promise<Pet> {
-    const dashboard = action === 'roast' || action === 'cat' || action === 'pray' ? await this.get(false, context) : this.snapshot ? this.contextual(this.snapshot, context) : undefined
+    const dashboard = action === 'roast' || action === 'cat' || action === 'pray' ? await this.get(false, context) : this.snapshot ? await this.contextual(this.snapshot, context) : undefined
     const pet = await mutatePet(this.options.dataDir, pet => interactPet(pet, action, dashboard))
     if (this.snapshot) this.snapshot.pet = pet
     return pet

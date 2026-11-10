@@ -1,10 +1,13 @@
 import type { Activity, WorkEvent } from '../model'
+import type { TaskContext } from '../core/personality'
+import { classifyTask } from './task-context'
 
-/** Only lifecycle metadata survives parsing: never store prompts, commands or tool output. */
+/** Only lifecycle metadata and task labels survive parsing, never prompts or tool output. */
 export type ActivityState = {
   session: string; parent: string; cwd: string; agent: boolean; turn: string; startedAt: number; updatedAt: number;
   active: boolean; planning: boolean; failures: number; approvals: number;
   event: Activity['event']; lastItem: string;
+  task?: TaskContext;
 }
 export const freshActivity = (): ActivityState => ({ session: '', parent: '', cwd: '', agent: false, turn: '', startedAt: 0, updatedAt: 0, active: false, planning: false, failures: 0, approvals: 0, event: null, lastItem: '' })
 
@@ -28,6 +31,10 @@ export function consumeActivity(state: ActivityState, record: any) {
     return
   }
   if (!Number.isFinite(at) || at < state.updatedAt) return
+  if (record.type === 'event_msg' && p.type === 'user_message' && typeof p.message === 'string') {
+    state.task = classifyTask(p.message, at, state.task)
+    return
+  }
   if (record.type === 'turn_context') { if (typeof p.cwd === 'string') state.cwd = p.cwd; return }
   const event = (kind: WorkEvent) => { state.event = { kind, at, failures: state.failures } }
   if (record.type === 'compacted') { event('compact'); state.updatedAt = at; return }

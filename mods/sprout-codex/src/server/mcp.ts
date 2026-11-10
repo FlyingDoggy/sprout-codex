@@ -9,8 +9,8 @@ import type { DashboardService } from './http'
 import { PET_ACTIONS, type PanelContext, type PetAction } from '../model'
 
 export function createMcpServer(service: DashboardService, html: string) {
-  const server = new McpServer({ name: 'sprout-codex', version: '0.4.1' })
-  const uri = 'ui://sprout/dashboard-port-v1.html'
+  const server = new McpServer({ name: 'sprout-codex', version: '0.5.1' })
+  const uri = 'ui://sprout/dashboard-personality-v1.html'
   const contextSchema = { cwd: z.string().max(4096).optional().describe('当前聊天的项目工作目录，用于右上角显示文件夹名。'), threadId: z.string().max(200).optional().describe('当前聊天 ID；面板刷新时保留。') }
   async function contextOf(args: PanelContext, meta?: Record<string, unknown>) {
     const context = panelContext(args, meta)
@@ -43,6 +43,17 @@ export function createMcpServer(service: DashboardService, html: string) {
     const pet = await service.interact(action, await contextOf(args, extra._meta))
     const text = { feed: '小苗喝到水了。', pat: '小苗收到摸摸。', roast: '小苗又有话说了。', pray: '小苗开始向 Tibo 求雨。', cat: 'CatGPT 来串门了。' }[action]
     return { content: [{ type: 'text', text }], structuredContent: { ...pet } }
+  })
+  registerAppTool(server, 'sprout_personality', {
+    title: '切换小苗人设', description: '列出本机人设，或选择一个人设并立即刷新台词。',
+    inputSchema: { persona: z.string().regex(/^[a-z0-9_-]{1,60}$/).optional(), ...contextSchema },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    _meta: { ui: { resourceUri: uri, visibility: ['app'] } },
+  }, async (args: PanelContext & { persona?: string }, extra: { _meta?: Record<string, unknown> }) => {
+    try {
+      const data = args.persona ? await service.selectPersonality(args.persona, await contextOf(args, extra._meta)) : await service.personalities()
+      return { content: [], structuredContent: { ...data } }
+    } catch { return { isError: true, content: [{ type: 'text', text: '无法切换，请检查人设文件。' }] } }
   })
   registerAppResource(server, '小苗面板', uri, {}, async () => ({ contents: [{ uri, mimeType: RESOURCE_MIME_TYPE, text: html, _meta: { ui: { prefersBorder: false } } }] }))
   return server

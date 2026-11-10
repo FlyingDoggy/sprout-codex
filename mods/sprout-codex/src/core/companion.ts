@@ -73,7 +73,8 @@ export function companion(d: Dashboard, now = Date.now()) {
   if (isLive && line.roast && ['busy', 'planning', 'compact', 'agents', 'test_failed', 'test_passed', 'done', 'interrupted', 'approval', 'return'].includes(key)) buckets.push('happy')
   if (buckets.includes('happy') && streak >= 7) buckets.push('streak')
   const pool = [...new Set(buckets.flatMap(bucket => {
-    return linesFor([bucket], context).map(line => line.text)
+    const custom = d.dialogue?.pools[bucket]
+    return custom?.length ? custom : linesFor([bucket], context).map(line => line.text)
   }))]
   const index = isLive ? line.index : key === 'test_failed' ? Math.min(2, Math.max(0, (work?.failures ?? 1) - 1)) : Math.floor(now / AUTO_LINE_MS) + Number.parseInt(hashOf(d.today), 36)
   if (now - (d.pet.prayerAt ?? 0) < 4000) { effect = 'pray'; mood = 'party' }
@@ -96,7 +97,7 @@ export function interactPet(pet: Pet, action: PetAction, dashboard?: Dashboard, 
   const bucket: SproutBucket = action === 'roast' ? model?.moodKey ?? 'happy'
     : action === 'feed' && count >= 3 ? 'overwater' : action === 'pat' && count >= 3 ? 'overpat' : action
   const roast = action === 'roast'
-  const cursorKey = `classic/${roast ? 'roast' : 'care'}/${bucket}`
+  const cursorKey = `${dashboard?.dialogue?.personaId ?? 'classic'}/${roast ? 'roast' : 'care'}/${bucket}`
   // Each action/persona resumes its own rotation even when buttons are interleaved.
   const previous = pet.lineCursors?.[cursorKey] ?? (model?.key === bucket ? model.index : pet.line?.bucket === bucket ? pet.line.index : Math.floor(now / 1000) % 97)
   const index = previous + 1

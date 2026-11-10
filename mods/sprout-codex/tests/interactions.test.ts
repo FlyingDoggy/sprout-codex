@@ -10,6 +10,7 @@ import { setLang } from '../src/core/i18n'
 import { wrapText } from '../src/core/logic'
 import { growthCards } from '../src/core/growth'
 import { panelContext, folderName } from '../src/server/context'
+import { CLASSIC_PERSONA, DELIVERY_PERSONA, personaPools } from '../src/core/personality'
 
 const now = Date.parse('2026-11-10T04:00:00Z')
 const record = (payload: object, at = now, type = 'event_msg') => ({ type, timestamp: new Date(at).toISOString(), payload })
@@ -132,10 +133,10 @@ test('three buttons have independent rotations through alternating actions and r
 })
 
 test('rapid care retains escalation with twelve lines; contextual roasting does not loop on four lines', () => {
-  {
-    const personaId = 'classic'
+  for (const pack of [CLASSIC_PERSONA, DELIVERY_PERSONA]) {
     const d = demoDashboard(now)
     d.quota.windows = []
+    d.dialogue = { personaId: pack.id, revision: 'test', pools: personaPools(pack, { scenario:'slides', signals:['layout','review'], at:now }) }
     for (const action of ['feed', 'pat', 'roast'] as const) {
       let pet = d.pet
       const lines = new Set<string>()
@@ -144,7 +145,7 @@ test('rapid care retains escalation with twelve lines; contextual roasting does 
         pet = interactPet(pet, action, d, now+i*100)
         if (i>=2) lines.add(companion({ ...d, pet }, now+i*100).text)
       }
-      assert.equal(lines.size, 12, `${personaId}/${action} should offer twelve distinct successive lines`)
+      assert.equal(lines.size, 12, `${pack.id}/${action} should offer twelve distinct successive lines`)
       if (action !== 'roast') assert.equal(pet.line?.bucket, action === 'feed' ? 'overwater' : 'overpat')
     }
   }

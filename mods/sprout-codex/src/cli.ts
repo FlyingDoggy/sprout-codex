@@ -5,15 +5,17 @@ import { serve } from './server/http'
 import { runMcp } from './server/mcp'
 import { readJson } from './server/storage'
 import type { Prices } from './server/usage'
+import { personalityCommand } from './server/personality-cli'
 
 async function main() {
   const command = process.argv[2] ?? 'serve'
-  if (!['serve', 'status', 'mcp'].includes(command)) {
-    console.log('Usage: node dist/cli.js <serve|status|mcp> [--demo] [--port 4317]')
+  if (!['serve', 'status', 'mcp', 'personality'].includes(command)) {
+    console.log('Usage: node dist/cli.js <serve|status|mcp|personality> [--demo] [--port 4317]')
     process.exitCode = command === '--help' || command === '-h' ? 0 : 1
     return
   }
   const options = optionsFromEnv()
+  if (command === 'personality') { console.log(JSON.stringify(await personalityCommand(options.dataDir, process.argv.slice(3)), null, 2)); return }
   if (process.env.SPROUT_PRICES_FILE) options.prices = await readJson<Prices>(process.env.SPROUT_PRICES_FILE, {})
   const service = process.argv.includes('--demo') ? demoService() : new SproutService(options)
   if (command === 'status') { console.log(JSON.stringify(await service.get(), null, 2)); return }

@@ -1,7 +1,13 @@
 import { createServer, type IncomingMessage } from 'node:http'
 import { PET_ACTIONS, type Dashboard, type Pet, type PetAction, type PanelContext } from '../model'
+import type { PersonalityMenu } from '../core/personality'
 
-export type DashboardService = { get(force?: boolean, context?: PanelContext): Promise<Dashboard>; interact(action: PetAction, context?: PanelContext): Promise<Pet> }
+export type DashboardService = {
+  get(force?: boolean, context?: PanelContext): Promise<Dashboard>;
+  interact(action: PetAction, context?: PanelContext): Promise<Pet>;
+  personalities(): Promise<PersonalityMenu>;
+  selectPersonality(id: string, context?: PanelContext): Promise<Dashboard>;
+}
 
 export async function serve(service: DashboardService, html: string, port: number) {
   const server = createServer(async (req, res) => {
@@ -18,6 +24,15 @@ export async function serve(service: DashboardService, html: string, port: numbe
     try {
       if (req.method === 'GET' && url.pathname === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(html); return }
       if (req.method === 'GET' && url.pathname === '/api/status') { json(200, await service.get(url.searchParams.get('refresh') === '1')); return }
+      if (req.method === 'GET' && url.pathname === '/api/personality') { json(200, await service.personalities()); return }
+      if (req.method === 'POST' && url.pathname === '/api/personality') {
+        if (req.headers['x-sprout-request'] !== '1' || !req.headers['content-type']?.startsWith('application/json')) { json(403, { error: '请求来源不受支持。' }); return }
+        const body = await readBody(req)
+        if (typeof body?.persona !== 'string' || !/^[a-z0-9_-]{1,60}$/.test(body.persona)) { json(400, { error: '无效的人设。' }); return }
+        try { json(200, await service.selectPersonality(body.persona)) }
+        catch { json(400, { error: '无法切换，请检查人设文件。' }) }
+        return
+      }
       if (req.method === 'POST' && url.pathname === '/api/interact') {
         if (req.headers['x-sprout-request'] !== '1' || !req.headers['content-type']?.startsWith('application/json')) { json(403, { error: '请求来源不受支持。' }); return }
         const body = await readBody(req)

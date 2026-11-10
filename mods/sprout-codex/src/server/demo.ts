@@ -1,6 +1,7 @@
 import { interactPet } from '../core/companion'
 import { dayAt, zeroTokens, type Dashboard, type PetAction } from '../model'
 import { PRICING_URL } from './pricing'
+import { CLASSIC_PERSONA, DELIVERY_PERSONA, personaPools } from '../core/personality'
 
 export function demoDashboard(now = Date.now()): Dashboard {
   const timezone = 'Asia/Shanghai'
@@ -21,10 +22,19 @@ export function demoDashboard(now = Date.now()): Dashboard {
 
 export function demoService() {
   const dashboard = demoDashboard()
+  let pack = CLASSIC_PERSONA
+  const get = async () => ({ ...dashboard, dialogue: { personaId: pack.id, revision: pack.version, pools: personaPools(pack, dashboard.task) } })
   return {
-    async get(_force = false) { return dashboard },
+    get,
+    async personalities() { return { current: pack.id, choices: [CLASSIC_PERSONA, DELIVERY_PERSONA].map(({ id, name }) => ({ id, name })) } },
+    async selectPersonality(id: string) {
+      const next = [CLASSIC_PERSONA, DELIVERY_PERSONA].find(p => p.id === id)
+      if (!next) throw new Error('Unknown persona')
+      pack = next
+      return get()
+    },
     async interact(action: PetAction) {
-      dashboard.pet = interactPet(dashboard.pet, action, dashboard)
+      dashboard.pet = interactPet(dashboard.pet, action, await get())
       return dashboard.pet
     },
   }

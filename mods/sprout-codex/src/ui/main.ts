@@ -1,6 +1,7 @@
 import { App } from '@modelcontextprotocol/ext-apps'
 import { PET_ACTIONS, type Dashboard, type Pet, type QuotaWindow, type PanelContext } from '../model'
 import { openGrowth, refreshGrowth } from './growth'
+import { personalityMenu } from './personality'
 import { BUBBLE_ROWS, BUBBLE_UNITS, sceneSvg } from '../core/scene'
 import { setLang } from '../core/i18n'
 import { capsuleSvg, tilesSvg, trendSvg, usageHeatmapSvg, githubHeatmapSvg, mergesSvg } from '../core/panels'
@@ -27,7 +28,19 @@ let drawingWidth = 0
 let lastSceneMarkup = ''
 const embedded = window.parent !== window
 document.documentElement.dataset.theme = theme
-
+const menu = personalityMenu({
+  load: () => call('sprout_personality'),
+  async select(persona) {
+    if (busy) throw new Error('正在更新')
+    busy = true
+    try {
+      dashboard = await call('sprout_personality', { persona })
+      panelContext = dashboard?.context ?? panelContext
+      errorText = ''
+    } finally { busy = false; render() }
+  },
+  refresh: () => refresh(true),
+})
 
 function svg(value: string | null | { svg: string }) {
   const text = typeof value === 'string' ? value : value?.svg ?? ''
@@ -152,7 +165,7 @@ function render() {
   const section = (heading: string, right: string, body: string) => `<section><div class="section-head"><h2>${heading}</h2>${right}</div>${body}</section>`
   const chart = (source: string | null | { svg: string }, label: string) => `<div class="chart" role="img" aria-label="${esc(label)}">${svg(source)}</div>`
   updatePanel(`<main>
-    <header><span class="dot" aria-hidden="true"></span><h1>小苗</h1><button class="refresh" id="refresh" title="${esc(d.projectName??'')} · ${time(d.updatedAt)} 更新 · 点击刷新" aria-label="刷新" ${busy ? 'disabled' : ''}>${esc(d.projectName??'')}</button></header>
+    <header><span class="dot" aria-hidden="true"></span><h1>小苗</h1><button class="refresh" id="project-menu" title="${esc(d.projectName??'')} · ${time(d.updatedAt)} 更新 · 人设与刷新" aria-label="人设与刷新" aria-haspopup="menu" aria-controls="personality-menu" aria-expanded="${menu.isOpen()}" ${busy ? 'disabled' : ''}>${esc(d.projectName || '···')}</button></header>
     ${d.demo ? '<p class="note demo">演示</p>' : ''}
     <div class="companion">
       <div class="pet-scene" role="group" data-width="${width}" aria-label="小苗，Lv${d.pet.highest}：${esc(pet.text)}" title="${esc(pet.text)}&#10;累计 ${formatTokens(d.usage.totals.total)} Token">${scene}</div>
@@ -169,6 +182,7 @@ function render() {
   if (focus) document.getElementById(focus)?.focus({ preventScroll: true })
   else if (sceneFocus) root.querySelector<SVGElement>(`[data-action="${sceneFocus}"]`)?.focus({ preventScroll: true })
   refreshGrowth(d)
+  menu.position()
 }
 
 async function call(name: string, args: Record<string, unknown> = {}): Promise<any> {
@@ -177,8 +191,8 @@ async function call(name: string, args: Record<string, unknown> = {}): Promise<a
     if (result.isError) throw new Error(result.content?.find(c => c.type === 'text')?.text ?? '暂时无法读取小苗')
     return result.structuredContent
   }
-  const path = name === 'sprout_interact' ? '/api/interact' : '/api/status'
-  const response = await fetch(path + (args.refresh ? '?refresh=1' : ''), path === '/api/interact' ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sprout-Request': '1' }, body: JSON.stringify(args) } : {})
+  const path = name === 'sprout_personality' ? '/api/personality' : name === 'sprout_interact' ? '/api/interact' : '/api/status'
+  const response = await fetch(path + (args.refresh ? '?refresh=1' : ''), name === 'sprout_interact' || args.persona ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sprout-Request': '1' }, body: JSON.stringify(args) } : {})
   if (!response.ok) throw new Error('暂时无法读取小苗')
   return response.json()
 }
@@ -201,6 +215,7 @@ root.addEventListener('click', async event => {
     render()
   }
   if (id === 'refresh') await refresh(true)
+  if (id === 'project-menu' && !busy) await menu.toggle()
   if (id && PET_ACTIONS.some(action => action === id) && dashboard && !busy) {
     busy = true
     root.querySelectorAll<HTMLButtonElement>('.pet-actions button').forEach(button => { button.disabled = true })
@@ -213,6 +228,9 @@ root.addEventListener('click', async event => {
   }
 })
 root.addEventListener('keydown', event => {
+  if ((event.target as HTMLElement).id === 'project-menu' && event.key === 'ArrowDown' && !menu.isOpen() && !busy) {
+    event.preventDefault(); void menu.toggle(); return
+  }
   const target = (event.target as Element).closest('[data-action]')
   if (target && (event.key === 'Enter' || event.key === ' ')) {
     event.preventDefault(); target.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -224,7 +242,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
 
 async function start() {
   if (embedded) {
-    app = new App({ name: 'Sprout Codex', version: '0.4.1' }, {})
+    app = new App({ name: 'Sprout Codex', version: '0.5.1' }, {})
     app.ontoolresult = result => { const data = result.structuredContent as Dashboard | undefined; if (data?.version === 1) { dashboard = data; panelContext=data.context??panelContext; render() } }
     app.onhostcontextchanged = context => { if (context.theme) { theme = context.theme; document.documentElement.dataset.theme = theme; render() } }
     await app.connect()
@@ -232,7 +250,7 @@ async function start() {
     if (context?.theme) { theme = context.theme; document.documentElement.dataset.theme = theme }
   }
   await refresh()
-  setInterval(() => { if (!document.hidden) void refresh() }, 15_000)
+  setInterval(() => { if (!document.hidden && !menu.isOpen()) void refresh() }, 15_000)
   setInterval(refreshScene, 1000)
 }
 void start().catch(() => { root.innerHTML = '<main><p class="error">小苗连接失败，请重新打开面板</p></main>' })

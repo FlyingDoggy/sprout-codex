@@ -1,5 +1,6 @@
 import type { SproutLine } from './types'
 import type { PricingInfo } from './server/pricing'
+import type { DialogueFrame, TaskContext } from './core/personality'
 export type Tokens = { input: number; cached: number; cacheWrite: number; output: number; reasoning: number; total: number }
 export type UsageDay = Tokens & { day: string; costUsd: number | null; knownCostUsd: number; pricedTokens: number }
 export type QuotaWindow = {
@@ -47,6 +48,8 @@ export type Dashboard = {
   pricing: PricingInfo;
   github: GithubData | null; githubStatus: string | null; demo: boolean;
   activity?: Activity;
+  task?: TaskContext;
+  dialogue?: DialogueFrame;
   context?: PanelContext; projectName?: string | null;
 }
 export const zeroTokens = (): Tokens => ({ input: 0, cached: 0, cacheWrite: 0, output: 0, reasoning: 0, total: 0 })

@@ -92,7 +92,10 @@ export type TilesInput = {
   width: number
   tokensLabel: string
   tokens: number
-  costUsd: number
+  costUsd: number | null
+  knownCostUsd?: number
+  numberWeight?: number
+  labelWeight?: number
   todayUsd: number
   streak: number
   week: boolean[]
@@ -116,7 +119,7 @@ export function tilesSvg(input: TilesInput) {
   const tw = (W - 8) / 2
   const th = TILE_HEIGHT
   const tokens = formatTokens(input.tokens)
-  const cost = formatUsd(input.costUsd)
+  const cost = input.costUsd !== null ? formatUsd(input.costUsd) : input.knownCostUsd ? `≥${formatUsd(input.knownCostUsd)}` : '—'
   const hit = `${(input.cacheHitRate * 100).toFixed(1)}%`
   const prev = input.previous
   const clips: string[] = []
@@ -183,8 +186,8 @@ export function tilesSvg(input: TilesInput) {
     : ''
 
   return `${svgOpen(W, H)}<style>${paletteCss(id)}
-.num-${id}{fill:#ececec;font-size:20px;font-weight:500}@media (prefers-color-scheme: light){.num-${id}{fill:#1f1e1d}}
-.today-${id},.on-${id}{fill:#D97757}.clay-${id}{fill:#E8906F}@media (prefers-color-scheme: light){.clay-${id}{fill:#B4532F}}${intro}
+.num-${id}{fill:#ececec;font-size:20px;font-weight:${input.numberWeight ?? 500}}@media (prefers-color-scheme: light){.num-${id}{fill:#1f1e1d}}
+${input.labelWeight ? `.t2-${id}{font-weight:${input.labelWeight}}` : ''}.today-${id},.on-${id}{fill:#D97757}.clay-${id}{fill:#E8906F}@media (prefers-color-scheme: light){.clay-${id}{fill:#B4532F}}${intro}
 ${todayCss(id)}
 </style><defs><linearGradient id="rg-${id}" x1="0" x2="1"><stop offset="0" stop-color="#F0997B"/><stop offset="1" stop-color="#D97757"/></linearGradient>${clips.join('')}</defs>${body}</svg>`
 }

@@ -1,11 +1,11 @@
 {
   "name": "sprout-codex",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "type": "module",
   "description": "小苗 for Codex: a local usage dashboard and pixel companion",
   "engines": {
-    "node": ">=22"
+    "node": "^22.16.0 || >=24.0.0"
   },
   "scripts": {
     "build": "node scripts/build.mjs",

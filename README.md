@@ -1,7 +1,3 @@
-> **Codex fork:** This repository adds [Sprout for Codex](mods/sprout-codex/README.md), with historical token growth, official API price estimates, and an MCP App panel. Install with Node.js 22+: `node mods/sprout-codex/scripts/install-codex.mjs`. Codex manages the stdio plugin process; no persistent web server is required. The original Claude setup remains below; its bootstrap script is not needed for the Codex port.
-
-**Install the Codex port: [installation guide (中文)](mods/sprout-codex/INSTALL.md)** · Ask Codex to install it, or follow the terminal steps.
-
 English | [中文](README.zh.md)
 
 <p align="center">
@@ -28,6 +24,9 @@ A band above the prompt: context used, time left on the prompt cache, session co
 </picture>
 
 ## sprout 小苗
+
+**Codex:** [Install the Codex adapter](mods/sprout-codex/INSTALL.md). It is a separate, opt-in stdio plugin; the Claude bootstrap and settings do not load it.
+
 
 小苗 (Miao) is a pane beside the chat, for the numbers one session cannot show:
 

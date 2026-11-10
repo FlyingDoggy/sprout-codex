@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
-import type { Quota, QuotaWindow, Usage } from '../model'
+import { quotaWindowIsLive, type Quota, type QuotaWindow, type Usage } from '../model'
 
 export function readRateLimits(binary = 'codex', codexHome?: string, timeoutMs = 12_000): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -56,10 +56,14 @@ export function normalizeQuota(raw: any, at: number, now = Date.now()): QuotaWin
       const mins = window?.windowDurationMins ?? window?.window_minutes
       const reset = window?.resetsAt ?? window?.resets_at
       if (!Number.isFinite(pct) || pct < 0 || !Number.isFinite(mins) || mins <= 0) continue
-      const resetsAt = Number.isFinite(reset) && reset > 0 ? reset * 1000 : null
-      if (resetsAt !== null && resetsAt <= now) continue
+      const relative = window?.resetsInSeconds ?? window?.resets_in_seconds
+      const absolute = typeof reset === 'number' && Number.isFinite(reset) && reset > 0 ? reset * 1000
+        : typeof reset === 'string' && /^\d{4}-\d\d-\d\dT/.test(reset) ? Date.parse(reset) : NaN
+      const resetsAt = Number.isFinite(absolute) ? absolute
+        : typeof relative === 'number' && Number.isFinite(relative) && relative >= 0 ? at + relative * 1000 : null
       const duration = mins % 10080 === 0 ? `${mins / 10080} 周` : mins % 1440 === 0 ? `${mins / 1440} 天` : mins % 60 === 0 ? `${mins / 60} 小时` : `${mins} 分钟`
-      windows.push({ id: `${id}:${name}:${mins}`, label: `${bucket.limitName ?? bucket.limit_name ?? id} · ${duration}`, usedPercent: pct, windowMinutes: mins, resetsAt, observedAt: at, projected: null })
+      const normalized = { id: `${id}:${name}:${mins}`, label: `${bucket.limitName ?? bucket.limit_name ?? id} · ${duration}`, usedPercent: pct, windowMinutes: mins, resetsAt, observedAt: at, projected: null }
+      if (quotaWindowIsLive(normalized, now)) windows.push(normalized)
     }
   }
   return windows

@@ -1,5 +1,7 @@
 # 小苗 · Codex
 
+**当前分支：`codex/sprout-port`。** 固定静态词库的移植基线，不包含可插拔人设或模型生成。 [三个版本的区别](BRANCHES.md)。
+
 Sprout 的 Codex 适配版。复用 [QingqiShi 的小苗](https://github.com/QingqiShi/claude/tree/main/mods/sprout)像素宠物和 SVG 图表，通过 Codex 管理的本机 stdio 插件提供 MCP App 面板。正式使用不需要启动 HTTP 服务或保留一个终端。
 
 **第一次安装：[看安装教程](INSTALL.md)**，可以直接把安装指令复制给 Codex，也可以跟着终端步骤操作。教程包含打开侧栏、更新和卸载。
@@ -70,6 +72,8 @@ codex mcp add sprout -- node "$PWD/dist/cli.js" mcp
 MCP Apps 兼容客户端可显示交互面板；已声明对话侧面板与全屏入口。具体宿主是否显示这些入口由客户端决定。CLI 等没有图形界面的宿主仍会得到文本和结构化数据。原版 Claude 的自动弹出、常驻侧栏不直接继承。
 
 ## 与原版的对应
+
+0.4.1 修复喂水／摸摸后“再嘴一句”串台、按钮交替点击重复和图表动效被重置；连续护理的嫌烦台词各扩到十二句。
 
 0.4.0 增加 Codex 场景互动，保持原版的布局、三个按钮和成长门槛：
 

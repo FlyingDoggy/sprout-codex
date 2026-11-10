@@ -33,6 +33,7 @@ export type SceneEffect = 'rain' | 'pray' | 'umbrella' | 'hide' | 'burp' | 'guar
 export type Pet = {
   fed: number; patted: number; highest: number; action: 'feed' | 'pat' | null; actionAt: number;
   line?: SproutLine | null; initialized?: boolean; levelUpUntil?: number;
+  lineCursors?: Record<string, number>;
   lastMergeAt?: number; party?: { number: number; until: number } | null;
   burst?: { action: 'feed' | 'pat'; count: number; at: number };
   prayed?: number; prayerAt?: number; cat?: { until: number; day: string }; nextCatAt?: number;

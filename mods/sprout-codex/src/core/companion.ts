@@ -24,7 +24,7 @@ export function companion(d: Dashboard, now = Date.now()) {
     five: five?.usedPercent ?? null,
     week: week?.usedPercent ?? null,
     isOverForecast: windows.some(w => (w.projected ?? 0) > 100 || (w.windowMinutes !== 10080 && w.usedPercent >= 85)),
-    isCelebrating: isLevelUp || party !== null || action === 'pat',
+    isCelebrating: isLevelUp || party !== null,
   })
   let moodKey: SproutBucket = bucketsFor(mood, hour, streak, { isLevelUp, lost })[0] ?? 'happy'
   let effect: SceneEffect = null
@@ -67,15 +67,23 @@ export function companion(d: Dashboard, now = Date.now()) {
     (line.at >= eventAt || action !== null) &&
     (['feed', 'pat', 'overwater', 'overpat', 'pray', 'cat'].includes(line.bucket) || line.bucket === moodKey)
   const key: SproutBucket = isLive ? line.bucket : moodKey
-  const pool = linesFor(key === 'happy' && streak >= 7 ? ['happy', 'streak'] : [key], context)
+  const buckets: SproutBucket[] = [key]
+  // A manual roast talks about work, not the previous watering/patting action.
+  // Short event pools share the persona's everyday banter after their specific lines.
+  if (isLive && line.roast && ['busy', 'planning', 'compact', 'agents', 'test_failed', 'test_passed', 'done', 'interrupted', 'approval', 'return'].includes(key)) buckets.push('happy')
+  if (buckets.includes('happy') && streak >= 7) buckets.push('streak')
+  const pool = [...new Set(buckets.flatMap(bucket => {
+    return linesFor([bucket], context).map(line => line.text)
+  }))]
   const index = isLive ? line.index : key === 'test_failed' ? Math.min(2, Math.max(0, (work?.failures ?? 1) - 1)) : Math.floor(now / AUTO_LINE_MS) + Number.parseInt(hashOf(d.today), 36)
   if (now - (d.pet.prayerAt ?? 0) < 4000) { effect = 'pray'; mood = 'party' }
   if (action && (d.pet.burst?.count ?? 0) >= 3) effect = action === 'feed' ? 'umbrella' : 'hide'
   else if (action && d.pet.burst?.count === 2) effect = action === 'feed' ? 'burp' : 'guard'
   if (!effect && hour < 5) effect = 'blanket'
+  if (action === 'pat' && mood !== 'sleep') mood = 'party'
   return {
     mood, moodKey, action, hour, streak, key, index, effect, showCat, canPray, agents: activity?.agents ?? 0,
-    text: pool[index % pool.length]?.text ?? '……',
+    text: pool[index % pool.length] ?? '……',
     isConfetti: (isLevelUp || party !== null) && mood === 'party',
     isPop: now - Math.max(d.pet.actionAt, line?.at ?? 0) < 1000,
   }
@@ -85,15 +93,22 @@ export function interactPet(pet: Pet, action: PetAction, dashboard?: Dashboard, 
   const model = dashboard ? companion({ ...dashboard, pet }, now) : null
   const repeated = action === 'feed' || action === 'pat'
   const count = repeated && pet.burst?.action === action && now - pet.burst.at < 12_000 ? pet.burst.count + 1 : 1
-  const bucket: SproutBucket = action === 'roast' ? model?.key ?? 'happy'
+  const bucket: SproutBucket = action === 'roast' ? model?.moodKey ?? 'happy'
     : action === 'feed' && count >= 3 ? 'overwater' : action === 'pat' && count >= 3 ? 'overpat' : action
-  // Advance from the displayed line as well as from a previous click, so the first roast changes it.
-  const previous = model?.key === bucket ? model.index : pet.line?.bucket === bucket ? pet.line.index : Math.floor(now / 1000) % 97
+  const roast = action === 'roast'
+  const cursorKey = `classic/${roast ? 'roast' : 'care'}/${bucket}`
+  // Each action/persona resumes its own rotation even when buttons are interleaved.
+  const previous = pet.lineCursors?.[cursorKey] ?? (model?.key === bucket ? model.index : pet.line?.bucket === bucket ? pet.line.index : Math.floor(now / 1000) % 97)
+  const index = previous + 1
+  const lineCursors = Object.fromEntries([...Object.entries(pet.lineCursors ?? {}).filter(([key]) => key !== cursorKey), [cursorKey, index]].slice(-128))
   return {
     ...pet,
+    ...(!repeated ? { action: null, actionAt: 0, burst: undefined } : {}),
+    ...(roast ? { prayerAt: 0 } : {}),
     ...(repeated ? { [action === 'feed' ? 'fed' : 'patted']: pet[action === 'feed' ? 'fed' : 'patted'] + 1, action, actionAt: now, burst: { action, count, at: now } } : {}),
     ...(action === 'pray' ? { prayed: (pet.prayed ?? 0) + 1, prayerAt: now } : {}),
     ...(action === 'cat' ? { cat: { day: dashboard?.today ?? new Date(now).toISOString().slice(0,10), until: now + 90_000 }, nextCatAt: now + 24 * 3_600_000 } : {}),
-    line: { bucket, index: previous + 1, at: now },
+    lineCursors,
+    line: { bucket, index, at: now, ...(roast ? { roast: true } : {}) },
   }
 }

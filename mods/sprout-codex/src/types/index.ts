@@ -52,7 +52,7 @@ export type SproutBucket =
   | 'busy' | 'planning' | 'compact' | 'agents' | 'test_failed' | 'test_passed'
   | 'done' | 'interrupted' | 'approval'
 
-export type SproutLine = { bucket: SproutBucket; index: number; at: number }
+export type SproutLine = { bucket: SproutBucket; index: number; at: number; roast?: boolean }
 
 export type SproutPet = {
   action: 'feed' | 'pat' | null

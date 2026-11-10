@@ -96,6 +96,60 @@ test('cat visits at most once per day automatically; clicking cat chooses its ow
   assert.equal(clicked.fed, d.pet.fed)
 })
 
+test('roast leaves every care/easter-egg pool immediately, including rapid pat animation', () => {
+  for (const kind of ['feed', 'pat', 'pray', 'cat'] as const) {
+    for (const count of [1, 3]) {
+      const d = demoDashboard(now)
+      d.quota.windows = []
+      d.activity = { active: 1, agents: 0, startedAt: now-180_000, planning: false, event: null }
+      let pet = d.pet
+      for (let i=0; i<count; i++) pet = interactPet(pet, kind, d, now+i)
+      const counters = [pet.fed, pet.patted, pet.highest]
+      pet = interactPet(pet, 'roast', d, now+10)
+      assert.equal(pet.line?.bucket, 'busy', `${kind} × ${count} must not hijack roast`)
+      const view = companion({ ...d, pet }, now+10)
+      assert.equal(view.key, 'busy')
+      assert.equal(view.action, null)
+      assert.deepEqual([pet.fed, pet.patted, pet.highest], counters)
+      assert.equal(pet.burst, undefined)
+    }
+  }
+})
+
+test('three buttons have independent rotations through alternating actions and restored saves', () => {
+  const d = demoDashboard(now)
+  d.quota.windows = []
+  const seen = { feed: new Set<string>(), pat: new Set<string>(), roast: new Set<string>() }
+  let pet = d.pet
+  for (let i=0; i<8; i++) {
+    for (const action of ['feed', 'pat', 'roast'] as const) {
+      pet = interactPet(JSON.parse(JSON.stringify(pet)), action, d, now+i*100)
+      const text = companion({ ...d, pet }, now+i*100).text
+      assert.equal(seen[action].has(text), false, `${action} repeated before its pool was exhausted`)
+      seen[action].add(text)
+    }
+  }
+})
+
+test('rapid care retains escalation with twelve lines; contextual roasting does not loop on four lines', () => {
+  {
+    const personaId = 'classic'
+    const d = demoDashboard(now)
+    d.quota.windows = []
+    for (const action of ['feed', 'pat', 'roast'] as const) {
+      let pet = d.pet
+      const lines = new Set<string>()
+      d.activity = { active:1,agents:0,startedAt:now-180_000,planning:false,event:{kind:'compact',at:now,failures:0} }
+      for (let i=0; i<14; i++) {
+        pet = interactPet(pet, action, d, now+i*100)
+        if (i>=2) lines.add(companion({ ...d, pet }, now+i*100).text)
+      }
+      assert.equal(lines.size, 12, `${personaId}/${action} should offer twelve distinct successive lines`)
+      if (action !== 'roast') assert.equal(pet.line?.bucket, action === 'feed' ? 'overwater' : 'overpat')
+    }
+  }
+})
+
 test('new scenes use event state and expiry; failure lines escalate deterministically', () => {
   const d = demoDashboard(now)
   for (let failures=1;failures<=3;failures++) {

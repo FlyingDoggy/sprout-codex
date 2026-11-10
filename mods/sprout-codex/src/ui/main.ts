@@ -4,7 +4,8 @@ import { openGrowth, refreshGrowth } from './growth'
 import { BUBBLE_ROWS, BUBBLE_UNITS, sceneSvg } from '../core/scene'
 import { setLang } from '../core/i18n'
 import { capsuleSvg, tilesSvg, trendSvg, usageHeatmapSvg, githubHeatmapSvg, mergesSvg } from '../core/panels'
-import { addDays, agoText, calendar, dayNumber, formatTokens, formatUsd, mergeCalendar, pipsFor, untilText, wrapText } from '../core/logic'
+import { addDays, agoText, calendar, dayNumber, formatTokens, formatUsd, introStep, mergeCalendar, pipsFor, untilText, wrapText } from '../core/logic'
+import type { SproutIntroKind, SproutIntroPlayed } from '../types'
 import { companion } from '../core/companion'
 import { esc } from '../core/svg-kit'
 
@@ -19,11 +20,14 @@ let errorText = ''
 let actionTimer: ReturnType<typeof setTimeout> | undefined
 let app: App | undefined
 let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-let playedIntro = false
+const introSeen = new Map<SproutIntroKind, string | null>()
+let introPlayed: SproutIntroPlayed = {}
+try { introPlayed = JSON.parse(localStorage.getItem('sprout-intros') ?? '{}') ?? {} } catch {}
 let drawingWidth = 0
 let lastSceneMarkup = ''
 const embedded = window.parent !== window
 document.documentElement.dataset.theme = theme
+
 
 function svg(value: string | null | { svg: string }) {
   const text = typeof value === 'string' ? value : value?.svg ?? ''
@@ -47,7 +51,9 @@ function updatePanel(markup: string) {
       if (key(element) === 'stats') {
         // Keep the actual controls mounted: clicking or refreshing must not drop :hover/focus.
         previous.querySelector('h2')!.textContent = element.querySelector('h2')!.textContent
-        previous.querySelector('.chart')!.replaceWith(element.querySelector('.chart')!)
+        const oldChart = previous.querySelector('.chart')!, newChart = element.querySelector('.chart')!
+        // Unchanged SVG nodes keep their running pulse and entrance animations.
+        if (oldChart.outerHTML !== newChart.outerHTML) oldChart.replaceWith(newChart)
         for (const button of previous.querySelectorAll('.range button')) {
           button.setAttribute('aria-pressed', element.querySelector(`#${button.id}`)!.getAttribute('aria-pressed')!)
         }
@@ -116,8 +122,6 @@ function render() {
   const chartDays = calendar(allDays, from, d.today)
   const last10 = calendar(allDays, addDays(d.today, -9), d.today)
   const last7 = last10.slice(-7)
-  const isIntro = !playedIntro
-  playedIntro = true
   const time = (at: number) => new Intl.DateTimeFormat('zh-CN', { timeZone: d.timezone, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at)
   const quota = d.quota.windows.map(w => {
     const { label, reset, sentence } = quotaText(w, d)
@@ -130,6 +134,19 @@ function render() {
   const mergeDays = gh ? mergeCalendar(gh.merges, mergeFrom, d.today) : []
   const mergeTotal = mergeDays.reduce((sum, day) => sum + day.prs, 0)
   const first = d.usage.firstDay
+  const tilesInput = { width, tokensLabel: range === '30' ? '30 天 token' : '累计 token', tokens, costUsd: cost, knownCostUsd: knownCost, todayUsd: last7.at(-1)?.costUsd ?? 0, streak: pet.streak, week: last7.map(day => day.tokens > 0), cacheHitRate: input ? cached / input : 0, bars: last10.map(day => day.tokens), previous: null }
+  // Keep the upstream per-chart entrance lifecycle; a pet click is not new chart data.
+  const { intro, started } = introStep(introSeen, {
+    tiles:first ? JSON.stringify(tilesInput) : null,
+    trend:first && chartDays.length >= 2 ? JSON.stringify([width, chartDays]) : null,
+    merges:mergeTotal ? JSON.stringify([width, mergeDays]) : null,
+    clay:first ? JSON.stringify([width, d.today, first, allDays]) : null,
+    github:gh?.days.length ? JSON.stringify([width, d.today, gh.days]) : null,
+  }, introPlayed, d.today)
+  if (started.length) {
+    introPlayed = { ...introPlayed, ...Object.fromEntries(started.map(kind => [kind, d.today])) }
+    try { localStorage.setItem('sprout-intros', JSON.stringify(introPlayed)) } catch {}
+  }
   const rangeLabel = range === 'all' && first ? `自 ${first.slice(0, 4) === d.today.slice(0, 4) ? '' : first.slice(0, 4) + ' 年 '}${Number(first.slice(5, 7))} 月 ${Number(first.slice(8))} 日起` : '最近 30 天'
   const costText = cost !== null ? formatUsd(cost) : knownCost ? `≥${formatUsd(knownCost)}` : '—'
   const section = (heading: string, right: string, body: string) => `<section><div class="section-head"><h2>${heading}</h2>${right}</div>${body}</section>`
@@ -143,11 +160,11 @@ function render() {
       ${errorText ? `<p class="error" role="status">${esc(errorText)}</p>` : ''}
     </div>
     ${section('额度', observed && Date.now() - observed > 15 * 60_000 ? `<span class="note">更新于 ${agoText(observed, Date.now())}</span>` : '', quota || '<p class="note">暂无额度读数</p>')}
-    ${first ? section(rangeLabel, `<div class="range" aria-label="统计范围"><button id="range30" aria-pressed="${range === '30'}">30 天</button><button id="rangeAll" aria-pressed="${range === 'all'}">全部</button></div>`, chart(tilesSvg({ width, tokensLabel: range === '30' ? '30 天 token' : '累计 token', tokens, costUsd: cost, knownCostUsd: knownCost, todayUsd: last7.at(-1)?.costUsd ?? 0, streak: pet.streak, week: last7.map(day => day.tokens > 0), cacheHitRate: input ? cached / input : 0, bars: last10.map(day => day.tokens), previous: null, isIntro }), `${rangeLabel}：${formatTokens(tokens)} token，${costText}；连续使用 ${pet.streak} 天；缓存命中 ${input ? (cached / input * 100).toFixed(1) : '0.0'}%`)) : '<p class="note">暂无使用记录</p>'}
-    ${first && chartDays.length >= 2 ? section('每日 token', '', chart(trendSvg(width, chartDays, isIntro), '每日 token')) : ''}
-    ${mergeTotal ? section('每日合并', `<span class="note">${mergeDays.length} 天 ${mergeTotal} 个 PR${gh?.mergesComplete ? '' : '（部分）'}</span>`, chart(mergesSvg(width, mergeDays, isIntro), '每日合并 PR 和增删行数')) : ''}
-    ${first ? section('Codex 使用', `<span class="note">${dayNumber(d.today) - dayNumber(first) + 1} 天里用了 ${d.usage.days.filter(day => day.total > 0 && day.day <= d.today).length} 天</span>`, chart(usageHeatmapSvg(width, allDays, first, d.today, isIntro), 'Codex 使用热力图')) : ''}
-    ${gh?.days.length ? section('GitHub 贡献', `<span class="note">过去一年 ${gh.total.toLocaleString()} 次</span>`, chart(githubHeatmapSvg(width, gh.days[0].day, gh.days.map(day => day.level).join(''), d.today, isIntro), 'GitHub 贡献热力图')) : ''}
+    ${first ? section(rangeLabel, `<div class="range" aria-label="统计范围"><button id="range30" aria-pressed="${range === '30'}">30 天</button><button id="rangeAll" aria-pressed="${range === 'all'}">全部</button></div>`, chart(tilesSvg({ ...tilesInput, isIntro:intro.has('tiles') }), `${rangeLabel}：${formatTokens(tokens)} token，${costText}；连续使用 ${pet.streak} 天；缓存命中 ${input ? (cached / input * 100).toFixed(1) : '0.0'}%`)) : '<p class="note">暂无使用记录</p>'}
+    ${first && chartDays.length >= 2 ? section('每日 token', '', chart(trendSvg(width, chartDays, intro.has('trend')), '每日 token')) : ''}
+    ${mergeTotal ? section('每日合并', `<span class="note">${mergeDays.length} 天 ${mergeTotal} 个 PR${gh?.mergesComplete ? '' : '（部分）'}</span>`, chart(mergesSvg(width, mergeDays, intro.has('merges')), '每日合并 PR 和增删行数')) : ''}
+    ${first ? section('Codex 使用', `<span class="note">${dayNumber(d.today) - dayNumber(first) + 1} 天里用了 ${d.usage.days.filter(day => day.total > 0 && day.day <= d.today).length} 天</span>`, chart(usageHeatmapSvg(width, allDays, first, d.today, intro.has('clay')), 'Codex 使用热力图')) : ''}
+    ${gh?.days.length ? section('GitHub 贡献', `<span class="note">过去一年 ${gh.total.toLocaleString()} 次</span>`, chart(githubHeatmapSvg(width, gh.days[0].day, gh.days.map(day => day.level).join(''), d.today, intro.has('github')), 'GitHub 贡献热力图')) : ''}
   </main>`)
   if (focus) document.getElementById(focus)?.focus({ preventScroll: true })
   else if (sceneFocus) root.querySelector<SVGElement>(`[data-action="${sceneFocus}"]`)?.focus({ preventScroll: true })
@@ -207,7 +224,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
 
 async function start() {
   if (embedded) {
-    app = new App({ name: 'Sprout Codex', version: '0.4.0' }, {})
+    app = new App({ name: 'Sprout Codex', version: '0.4.1' }, {})
     app.ontoolresult = result => { const data = result.structuredContent as Dashboard | undefined; if (data?.version === 1) { dashboard = data; panelContext=data.context??panelContext; render() } }
     app.onhostcontextchanged = context => { if (context.theme) { theme = context.theme; document.documentElement.dataset.theme = theme; render() } }
     await app.connect()

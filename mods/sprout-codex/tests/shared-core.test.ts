@@ -1,7 +1,11 @@
 import {createHash} from 'node:crypto'
-import {setLang} from '../../sprout/hooks/i18n'
-import {sceneSvg} from '../../sprout/hooks/scene'
-import {tilesSvg,trendSvg,usageHeatmapSvg,githubHeatmapSvg} from '../../sprout/hooks/panels'
+import {createRequire} from 'node:module'
+// The upstream source is CommonJS under tsx on Node 22. Load the helpers
+// through that same module graph so the language singleton is shared.
+const require = createRequire(import.meta.url)
+const {setLang} = require('../../sprout/hooks/i18n.ts')
+const {sceneSvg} = require('../../sprout/hooks/scene.ts')
+const {tilesSvg,trendSvg,usageHeatmapSvg,githubHeatmapSvg} = require('../../sprout/hooks/panels.ts')
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 test('shared renderers preserve Claude output in both languages and all nine stages',()=>{

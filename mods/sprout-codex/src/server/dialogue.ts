@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { Dashboard } from '../model'
 import type { SproutBucket } from '../types'
 import { companion } from '../core/companion'
-import { personaPools } from '../core/personality'
+import { personaPools, taskLinesFor } from '../core/personality'
 import { LINES } from '../core/lines'
 import { loadPersonality, validDialogue } from './personality-config'
 import type { DialogueProvider } from './dialogue-provider'
@@ -23,7 +23,7 @@ export class DialogueEngine {
       const loaded = await loadPersonality(this.dataDir)
       const { config, pack, revision } = loaded
       const pools = personaPools(pack, d.task)
-      const result: Dashboard = { ...d, dialogue:{ personaId:pack.id, revision, pools } }
+      const result: Dashboard = { ...d, dialogue:{ personaId:pack.id, revision, pools, inheritOriginal:pack.inheritOriginal, taskLines:taskLinesFor(pack,d.task) } }
       const bucket = actionBucket ?? companion(result).key
       // OFF means no generated text is consumed either, even if an old cache is present.
       if (!config.generation.enabled || !this.provider) return result

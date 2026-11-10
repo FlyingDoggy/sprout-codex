@@ -17,6 +17,7 @@ const packSchema = z.object({
   schemaVersion: z.literal(1), id: z.string().regex(/^[a-z0-9_-]{1,60}$/), version: z.string().min(1).max(40),
   extends: z.enum(['classic', 'delivery']).default('classic'), name: z.string().min(1).max(80),
   identity: z.string().max(1200).optional(), voice: z.array(z.string().max(500)).max(16).optional(),
+  inheritOriginal: z.boolean().optional(),
   pools: pools.default({}), scenes: z.partialRecord(z.enum(TASK_SCENARIOS), lines).default({}),
   signals: z.partialRecord(z.enum(TASK_SIGNALS), lines).default({}),
 }).strict()
@@ -25,7 +26,7 @@ export function parsePersona(input: unknown, id: string): PersonaPack {
   const custom = packSchema.parse(input)
   if (custom.id !== id) throw new Error('人设文件名与 id 不一致。')
   const base = custom.extends === 'delivery' ? DELIVERY_PERSONA : CLASSIC_PERSONA
-  return { ...base, ...custom, identity:custom.identity ?? base.identity, voice:custom.voice ?? base.voice,
+  return { ...base, ...custom, inheritOriginal:custom.inheritOriginal ?? base.inheritOriginal, identity:custom.identity ?? base.identity, voice:custom.voice ?? base.voice,
     pools:{ ...base.pools, ...custom.pools }, scenes:{ ...base.scenes, ...custom.scenes }, signals:{ ...base.signals, ...custom.signals } } as PersonaPack
 }
 

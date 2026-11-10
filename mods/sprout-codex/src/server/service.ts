@@ -1,8 +1,9 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdir, rm, stat } from 'node:fs/promises'
-import { dayAt, type Dashboard, type GithubData, type Pet, type Quota } from '../model'
-import { levelForTokens, forecast } from '../core/logic'
+import { dayAt, type Dashboard, type GithubData, type Pet, type PetAction, type Quota } from '../model'
+import { interactPet } from '../core/companion'
+import { growthStep, forecast } from '../core/logic'
 import { scanUsage, type Prices } from './usage'
 import { getQuota } from './codex'
 import { readGithub } from './github'
@@ -74,11 +75,11 @@ export class SproutService {
       if (!opts.github) return { value: null, status: 'GitHub 统计未启用。' }
       if (!this.github) {
         const saved = await readJson<GithubData | null>(join(opts.dataDir, 'github.json'), null)
-        if (saved) this.github = { at: saved.fetchedAt, value: saved, status: null }
+        if (saved) this.github = { at: usage.firstDay && saved.mergesFrom !== usage.firstDay ? 0 : saved.fetchedAt, value: saved, status: null }
       }
       if (!this.github || Date.now() - this.github.at > 30 * 60_000) {
         try {
-          const value = await readGithub(opts.timezone)
+          const value = await readGithub(opts.timezone, Date.now(), usage.firstDay ?? undefined)
           await writeJson(join(opts.dataDir, 'github.json'), value)
           this.github = { at: Date.now(), value, status: null }
         } catch { this.github = { at: Date.now(), value: this.github?.value ?? null, status: 'GitHub 暂不可用，请检查 gh 的 github.com 登录状态。' } }
@@ -94,18 +95,28 @@ export class SproutService {
       if (!history.some(p => p.at === window.observedAt)) history.push({ at: window.observedAt, pct: window.usedPercent })
       samples[key] = history.slice(-1500)
       const fresh = Date.now() - window.observedAt < 10 * 60_000
-      const projected = fresh && window.resetsAt ? forecast(history, { pct: window.usedPercent, at: window.observedAt, resetsAt: window.resetsAt }, { windowMs: window.windowMinutes * 60_000, lookbackMs: Math.min(86_400_000, window.windowMinutes * 60_000 / 4) }).projected : null
-      return { ...window, projected }
+      const fc = fresh && window.resetsAt ? forecast(history, { pct: window.usedPercent, at: window.observedAt, resetsAt: window.resetsAt }, { windowMs: window.windowMinutes * 60_000, lookbackMs: Math.min(86_400_000, window.windowMinutes * 60_000 / 5) }) : null
+      return { ...window, projected: fc?.projected ?? null, forecast: fc ? { fullAt: fc.fullAt, basis: fc.basis } : undefined }
     })
     for (const key of Object.keys(samples)) if (!samples[key].some(p => p.at > Date.now() - 8 * 86_400_000)) delete samples[key]
     await writeJson(samplesPath, samples)
-    const pet = await mutatePet(opts.dataDir, pet => ({ ...pet, highest: Math.max(pet.highest, levelForTokens(usage.totals.total)) }))
+    const pet = await mutatePet(opts.dataDir, pet => {
+      const growth = growthStep(pet.initialized ? pet.highest : null, usage.totals.total)
+      const latest = github.value?.latestMerge
+      const isMerge = latest && latest.at > (pet.lastMergeAt ?? 0) && Date.now() - latest.at < (pet.lastMergeAt === undefined ? 10 * 60_000 : 6 * 3_600_000)
+      return { ...pet, highest: Math.max(pet.highest, growth.highest), initialized: true,
+        levelUpUntil: growth.isLevelUp ? Date.now() + 10 * 60_000 : pet.levelUpUntil,
+        lastMergeAt: latest?.at ?? pet.lastMergeAt,
+        party: isMerge ? { number: latest.number, until: Date.now() + 10 * 60_000 } : pet.party,
+      }
+    })
     const { lastQuota: _, ...publicUsage } = usage
     return { version: 1, updatedAt: Date.now(), today: dayAt(Date.now(), opts.timezone), timezone: opts.timezone, usage: publicUsage, pricing: pricing.info, quota: { ...quota, windows }, pet, github: github.value, githubStatus: github.status, demo: false }
   }
 
-  async interact(action: 'feed' | 'pat'): Promise<Pet> {
-    const pet = await mutatePet(this.options.dataDir, pet => ({ ...pet, [action === 'feed' ? 'fed' : 'patted']: pet[action === 'feed' ? 'fed' : 'patted'] + 1, action, actionAt: Date.now() }))
+  async interact(action: PetAction): Promise<Pet> {
+    const dashboard = action === 'roast' ? await this.get() : this.snapshot
+    const pet = await mutatePet(this.options.dataDir, pet => interactPet(pet, action, dashboard))
     if (this.snapshot) this.snapshot.pet = pet
     return pet
   }

@@ -1,9 +1,11 @@
+import type { SproutLine } from './types'
 import type { PricingInfo } from './server/pricing'
 export type Tokens = { input: number; cached: number; cacheWrite: number; output: number; reasoning: number; total: number }
 export type UsageDay = Tokens & { day: string; costUsd: number | null; knownCostUsd: number; pricedTokens: number }
 export type QuotaWindow = {
   id: string; label: string; usedPercent: number; windowMinutes: number;
   resetsAt: number | null; observedAt: number; projected: number | null;
+  forecast?: { fullAt: number | null; basis: 'recent' | 'average' };
 }
 export type Quota = { source: 'live' | 'session' | 'unavailable'; windows: QuotaWindow[]; message: string | null }
 export type Usage = {
@@ -17,8 +19,14 @@ export type GithubData = {
   fetchedAt: number; total: number; days: { day: string; level: number }[];
   merges: { day: string; prs: number; additions: number; deletions: number }[];
   mergesComplete: boolean;
+  mergesFrom?: string; latestMerge?: { number: number; at: number } | null;
 }
-export type Pet = { fed: number; patted: number; highest: number; action: 'feed' | 'pat' | null; actionAt: number }
+export type PetAction = 'feed' | 'pat' | 'roast'
+export type Pet = {
+  fed: number; patted: number; highest: number; action: 'feed' | 'pat' | null; actionAt: number;
+  line?: SproutLine | null; initialized?: boolean; levelUpUntil?: number;
+  lastMergeAt?: number; party?: { number: number; until: number } | null;
+}
 export type Dashboard = {
   version: 1; updatedAt: number; today: string; timezone: string;
   usage: Omit<Usage, 'lastQuota'>; quota: Quota; pet: Pet;

@@ -1,13 +1,13 @@
 ---
 name: sprout
-description: 打开小苗，查看 Codex 本机用量、订阅额度与 GitHub 贡献，或给像素宠物喂水、摸摸。
+description: 打开小苗，查看 Codex 本机用量、订阅额度与 GitHub 贡献，或给像素宠物喂水、摸摸，或让它再嘴一句。
 ---
 
 Call the Sprout MCP server's `sprout_status` tool to open the dashboard. Set `refresh: true` when the user asks for an update. Hosts that support MCP Apps show the interactive panel; otherwise summarize the tool result.
 
-Use `sprout_interact` with `action: feed` or `action: pat` for the requested pet interaction.
+Use `sprout_interact` with `action: feed`, `action: pat`, or `action: roast` for the requested pet interaction.
 
-Usage covers retained local Codex sessions, including archived sessions. All history automatically contributes to growth, independently of the dashboard's date filter. It is not the whole ChatGPT account's usage. Cached reads and writes are included in input, and reasoning tokens are included in output; do not add them again. Prices come from OpenAI's official pricing page and are cached for offline use. Report the verification date and assumptions when explaining costs: these are current-price API-equivalent estimates, not past payments or subscription bills. Unknown models remain unpriced; partial known totals show coverage.
+Usage covers retained local Codex sessions, including archived sessions. All history automatically contributes to growth, independently of the dashboard's date filter. It is not the whole ChatGPT account's usage. Cached reads and writes are included in input, and reasoning tokens are included in output; do not add them again. Prices come from OpenAI's official pricing page and are cached for offline use. Keep the panel and normal replies concise; only explain verification dates and assumptions when the user asks about the calculation: these are current-price API-equivalent estimates, not past payments or subscription bills. Unknown models remain unpriced; partial known totals use ≥.
 
 Read quota source and timestamps. Session-derived readings can be stale; forecasts are estimates. Missing quota data does not mean the account has no remaining quota.
 

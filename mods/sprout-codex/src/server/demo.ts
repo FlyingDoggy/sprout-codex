@@ -1,3 +1,4 @@
+import { interactPet } from '../core/companion'
 import { dayAt, zeroTokens, type Dashboard } from '../model'
 import { PRICING_URL } from './pricing'
 
@@ -22,9 +23,8 @@ export function demoService() {
   const dashboard = demoDashboard()
   return {
     async get(_force = false) { return dashboard },
-    async interact(action: 'feed' | 'pat') {
-      dashboard.pet[action === 'feed' ? 'fed' : 'patted']++
-      dashboard.pet.action = action; dashboard.pet.actionAt = Date.now()
+    async interact(action: 'feed' | 'pat' | 'roast') {
+      dashboard.pet = interactPet(dashboard.pet, action, dashboard)
       return dashboard.pet
     },
   }

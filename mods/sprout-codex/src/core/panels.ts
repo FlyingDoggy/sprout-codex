@@ -92,7 +92,8 @@ export type TilesInput = {
   width: number
   tokensLabel: string
   tokens: number
-  costUsd: number
+  costUsd: number | null
+  knownCostUsd?: number
   todayUsd: number
   streak: number
   week: boolean[]
@@ -116,7 +117,7 @@ export function tilesSvg(input: TilesInput) {
   const tw = (W - 8) / 2
   const th = TILE_HEIGHT
   const tokens = formatTokens(input.tokens)
-  const cost = formatUsd(input.costUsd)
+  const cost = input.costUsd !== null ? formatUsd(input.costUsd) : input.knownCostUsd ? `≥${formatUsd(input.knownCostUsd)}` : '—'
   const hit = `${(input.cacheHitRate * 100).toFixed(1)}%`
   const prev = input.previous
   const clips: string[] = []

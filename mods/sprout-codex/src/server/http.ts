@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage } from 'node:http'
 import type { Dashboard, Pet } from '../model'
 
-export type DashboardService = { get(force?: boolean): Promise<Dashboard>; interact(action: 'feed' | 'pat'): Promise<Pet> }
+export type DashboardService = { get(force?: boolean): Promise<Dashboard>; interact(action: 'feed' | 'pat' | 'roast'): Promise<Pet> }
 
 export async function serve(service: DashboardService, html: string, port: number) {
   const server = createServer(async (req, res) => {
@@ -21,7 +21,7 @@ export async function serve(service: DashboardService, html: string, port: numbe
       if (req.method === 'POST' && url.pathname === '/api/interact') {
         if (req.headers['x-sprout-request'] !== '1' || !req.headers['content-type']?.startsWith('application/json')) { json(403, { error: '请求来源不受支持。' }); return }
         const body = await readBody(req)
-        if (body.action !== 'feed' && body.action !== 'pat') { json(400, { error: '未知的小苗动作。' }); return }
+        if (body.action !== 'feed' && body.action !== 'pat' && body.action !== 'roast') { json(400, { error: '未知的小苗动作。' }); return }
         json(200, await service.interact(body.action)); return
       }
       json(404, { error: '页面不存在。' })

@@ -90,7 +90,7 @@ export async function panelHtml($: EngineInterface, host: Host, paneWidth: numbe
   const drawn = <T>(kind: SproutIntroKind, build: (isIntro: boolean) => T) => memoize(`${drawings[kind]}|${intro.has(kind)}`, () => build(intro.has(kind)))
 
   const sections = [
-    { key: 'header', html: `<header><span class="dot" aria-hidden="true"></span><h1>${esc(title())}</h1>${button('refresh', project ?? '', ` class="plain project" title="${esc(t('点击刷新', 'Click to refresh'))}" aria-label="${esc(t('刷新', 'Refresh'))}"`)}</header>` },
+    { key: 'header', html: `<header><span class="dot" aria-hidden="true"></span><h1>${esc(title())}</h1>${button('personality', project ?? '', ` id="project-menu" class="plain project" title="${esc(t('人设与刷新', 'Personality and refresh'))}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t('人设与刷新', 'Personality and refresh'))}"`)}</header>` },
     { key: 'pet', html: `<div class="pet">${sceneHtml(model, width)}<div class="actions">${button('feed', t('喂水', 'Water'))}${button('pat', t('摸摸', 'Pat'))}${button('roast', t('再嘴一句', 'Roast me'))}</div></div>` },
     { key: 'quota', html: quotaHtml(model, width) },
   ]

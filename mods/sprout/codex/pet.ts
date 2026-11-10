@@ -91,7 +91,8 @@ export async function interact($: EngineInterface, action: Action, model: Model)
     if (count >= 3) await talk($, bucket(action === 'feed' ? 'overwater' : 'overpat'))
   } else if (action === 'roast') {
     pet.prayedAt = 0
-    await talk($, model.moodKey)
+    pet.burst = null
+    await talk($, model.moodKey, true)
   } else if (action === 'pray') {
     pet.prayedAt = now
     await talk($, bucket('pray'))

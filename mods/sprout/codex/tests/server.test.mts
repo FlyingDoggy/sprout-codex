@@ -68,6 +68,7 @@ test('Codex can list the tools, read the panel, draw it and play with the pet ov
     [
       { type: 'session_meta', timestamp: new Date().toISOString(), payload: { id: 'thread-a', cwd: '/work/my-app' } },
       { timestamp: new Date().toISOString(), type: 'token_usage_record', payload: { thread_id: 'thread-a', response_id: 'r1', usage } },
+      { timestamp: new Date().toISOString(), type: 'event_msg', payload: { type: 'user_message', message: '输出可编辑的 PPT' } },
     ]
       .map(record => JSON.stringify(record))
       .join('\n') + '\n',
@@ -108,6 +109,15 @@ test('Codex can list the tools, read the panel, draw it and play with the pet ov
     assert.match((await tool('sprout_interact', { action: 'pray' })).content[0].text, /Tibo|rain|reset/i)
     assert.match((await drawn({ atlas: true })).atlas, /Lv9/)
     assert.equal((await tool('sprout_interact', { action: 'dance' })).isError, true)
+    const selected = await drawn({ lang: 'zh-CN', persona: 'delivery', menu: true, action: 'roast' })
+    assert.equal(selected.menu.current, 'delivery')
+    assert.match(selected.sections.find((s: Json) => s.key === 'pet').html, /可编辑的 PPT，别他妈交一叠截图/)
+    await drawn({ lang: 'zh-CN', action: 'feed' })
+    const afterWater = await drawn({ lang: 'zh-CN', action: 'roast' })
+    assert.match(afterWater.sections.find((s: Json) => s.key === 'pet').html, /改一页就改一页/)
+    await drawn({ lang: 'zh-CN', persona: 'classic' })
+    const restored = await drawn({ lang: 'zh-CN', persona: 'delivery', action: 'roast' })
+    assert.match(restored.sections.find((s: Json) => s.key === 'pet').html, /又来上班？行，今天的 token 我替你烧/)
   } finally {
     server.kill()
     rmSync(home, { recursive: true, force: true })

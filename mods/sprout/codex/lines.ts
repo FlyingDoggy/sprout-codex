@@ -59,6 +59,7 @@ const EN: Record<keyof typeof ZH, readonly string[]> = {
 }
 
 export type CodexBucket = keyof typeof ZH
+export const CODEX_BUCKETS = Object.keys(ZH)
 
 /** The buckets that follow what Codex does. A line from one of them goes when the event does. */
 export const EVENT_BUCKETS = ['reset', 'return', 'busy', 'planning', 'compact', 'agents', 'test_failed', 'test_passed', 'done', 'interrupted', 'approval'] as const satisfies readonly CodexBucket[]

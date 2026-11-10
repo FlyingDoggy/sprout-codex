@@ -1,6 +1,11 @@
 import type { SproutBucket } from '../types'
 import type { Mood } from './logic'
 
+export type LineChoice = {
+  text: string; key: SproutBucket; moodKey: SproutBucket; index: number; now: number; streak: number
+  original(bucket: SproutBucket): string[]
+}
+
 /**
  * What differs between the apps Miao lives in. The Claude Code mod uses `claude`; `codex/` has the one for Codex.
  * The engine lets `$` go only to a function it can see, so a host holds values and plain functions, and never takes `$`.
@@ -14,6 +19,7 @@ export type Host = {
   context?(): Record<string, string | number | null>
   /** The last word on a line, for a host that is not Claude Code. */
   say?(text: string): string
+  chooseLine?(choice: LineChoice): string
 }
 
 export const claude: Host = {}

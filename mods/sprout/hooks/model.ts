@@ -223,7 +223,8 @@ export async function readModel($: EngineInterface, host: Host = claude) {
   const index = isLineLive ? line.index : (hostBucket?.index ?? Math.floor(now / AUTO_LINE_MS) + Number.parseInt(hashOf(today), 36))
   const silence = t('……', '…')
   const said = pool.length === 0 ? silence : (pool[index % pool.length]?.text ?? silence)
-  const text = host.say?.(said) ?? said
+  const chosen = host.chooseLine?.({ text: said, key: lineKey, moodKey, index, now, streak, original: bucket => linesFor(poolFor(bucket, streak), context).map(line => line.text) }) ?? said
+  const text = host.say?.(chosen) ?? chosen
 
   return {
     now,
@@ -276,11 +277,12 @@ export async function press($: EngineInterface, kind: 'feed' | 'pat') {
   } catch {}
 }
 
-export async function talk($: EngineInterface, key: SproutBucket) {
+export async function talk($: EngineInterface, key: SproutBucket, clearAction = false) {
   const now = await $.clock.now()
   const seed = Math.floor(now / 1000) % 97
   await update($, petState, (pet: SproutPet) => ({
     ...pet,
+    ...(clearAction ? { action: null, actionAt: 0 } : {}),
     line: { bucket: key, index: pet.line?.bucket === key ? pet.line.index + 1 : seed, at: now },
   }))
 }

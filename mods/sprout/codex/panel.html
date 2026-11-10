@@ -154,6 +154,13 @@
         display: flex;
         gap: 8px;
       }
+      .personality-menu { position: fixed; z-index: 5; min-width: 164px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow-y: auto; padding: 6px; background: var(--paper); border: 1px solid var(--button); border-radius: 10px; box-shadow: 0 6px 24px #0002; }
+      .personality-menu[hidden] { display: none; }
+      .personality-menu p { padding: 5px 8px; color: var(--muted); font-size: 12px; }
+      .personality-menu button { display: flex; justify-content: space-between; gap: 16px; width: 100%; text-align: left; background: transparent; padding: 7px 8px; }
+      .personality-menu button span:first-child { overflow: hidden; text-overflow: ellipsis; }
+      .personality-menu button:hover { background: var(--button); }
+      .personality-menu hr { border: 0; border-top: 1px solid var(--button); margin: 5px; }
       dialog {
         width: calc(100% - 24px);
         max-width: 1080px;
@@ -311,7 +318,7 @@
         const width = app.clientWidth || innerWidth
         const result = await request('tools/call', { name: 'sprout_view', arguments: { width, lang: locale, ...context, ...extra } })
         const data = result?.structuredContent
-        if (result?.isError || !data) return
+        if (result?.isError || !data) { if (extra.persona) throw new Error('Persona selection failed'); return; }
         sections = data.sections
         paint()
         if (data.atlas) {
@@ -320,7 +327,136 @@
         }
       }
 
+
+
+function personalityMenu(options
+
+
+
+ ) {
+  const menu = document.createElement('div')
+  menu.id = 'personality-menu'
+  menu.className = 'personality-menu'
+  menu.setAttribute('role', 'menu')
+  menu.setAttribute('aria-label', '人设与刷新')
+  menu.hidden = true
+  document.body.append(menu)
+  let generation = 0
+  const anchor = () => document.getElementById('project-menu')
+  const buttons = () => [...menu.querySelectorAll                   ('button:not(:disabled)')]
+  function position() {
+    const rect = anchor()?.getBoundingClientRect()
+    if (!rect || menu.hidden) return
+    menu.style.left = `${Math.max(8, Math.min(rect.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 8))}px`
+    menu.style.top = `${Math.max(8, Math.min(rect.bottom + 8, innerHeight - menu.offsetHeight - 8))}px`
+  }
+  function close(restoreFocus = false) {
+    if (menu.hidden) return
+    generation++
+    menu.hidden = true
+    anchor()?.setAttribute('aria-expanded', 'false')
+    if (restoreFocus) anchor()?.focus({ preventScroll: true })
+  }
+  function note(text        , role         ) {
+    const element = document.createElement('p')
+    element.textContent = text
+    if (role) element.setAttribute('role', role)
+    menu.append(element)
+  }
+  async function open() {
+    const request = ++generation
+    menu.replaceChildren()
+    menu.hidden = false
+    anchor()?.setAttribute('aria-expanded', 'true')
+    note('…')
+    position()
+    try {
+      const state = await options.load()
+      if (menu.hidden || request !== generation) return
+      menu.replaceChildren()
+      note('人设')
+      for (const choice of state.choices) {
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.setAttribute('role', 'menuitemradio')
+        button.setAttribute('aria-checked', String(choice.id === state.current))
+        button.dataset.persona = choice.id
+        const label = document.createElement('span')
+        label.textContent = choice.name
+        const check = document.createElement('span')
+        check.setAttribute('aria-hidden', 'true')
+        check.textContent = choice.id === state.current ? '✓' : ''
+        button.append(label, check)
+        menu.append(button)
+      }
+      const divider = document.createElement('hr')
+      const refresh = document.createElement('button')
+      refresh.type = 'button'
+      refresh.setAttribute('role', 'menuitem')
+      refresh.dataset.refresh = 'true'
+      refresh.textContent = '刷新'
+      menu.append(divider, refresh)
+      position()
+      menu.querySelector                   ('[aria-checked="true"]')?.focus({ preventScroll: true })
+    } catch {
+      if (menu.hidden || request !== generation) return
+      menu.replaceChildren()
+      note('暂时无法读取人设', 'status')
+      position()
+    }
+  }
+  menu.addEventListener('click', async event => {
+    const button = (event.target           ).closest                   ('button')
+    if (!button || button.disabled) return
+    if (button.dataset.refresh) { close(true); await options.refresh(); return }
+    if (!button.dataset.persona) return
+    if (button.getAttribute('aria-checked') === 'true') { close(true); return }
+    const request = generation
+    buttons().forEach(item => { item.disabled = true })
+    menu.querySelector('[role="status"]')?.remove()
+    try {
+      await options.select(button.dataset.persona)
+      if (request === generation) close(true)
+    } catch {
+      if (menu.hidden || request !== generation) return
+      menu.querySelectorAll                   ('button').forEach(item => { item.disabled = false })
+      note('切换失败，请重试', 'status')
+      button.focus({ preventScroll: true })
+      position()
+    }
+  })
+  document.addEventListener('pointerdown', event => {
+    const target = event.target
+    if (!menu.contains(target) && !anchor()?.contains(target)) close()
+  })
+  document.addEventListener('keydown', event => {
+    if (menu.hidden) return
+    if (event.key === 'Escape') { event.preventDefault(); close(true); return }
+    if (event.key === 'Tab') { close(true); return }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const items = buttons()
+    const index = items.indexOf(document.activeElement                     )
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+    items[next]?.focus({ preventScroll: true })
+  })
+  window.addEventListener('resize', position)
+  document.addEventListener('scroll', position, true)
+  return { isOpen: () => !menu.hidden, position, close, toggle: () => menu.hidden ? open() : close(true) }
+}
+
+      const personalities = personalityMenu({
+        load: async () => {
+          const result = await request('tools/call', { name: 'sprout_view', arguments: { ...context, menu: true, lang: locale } });
+          if (result?.isError || !result?.structuredContent?.menu) throw new Error('Cannot load personas');
+          return result.structuredContent.menu;
+        },
+        select: async persona => { await view({ persona }); },
+        refresh: () => view({ refresh: true }),
+      });
+
       function act(action) {
+        if (action === 'personality') return personalities.toggle();
         if (action === 'atlas') return view({ atlas: true })
         if (action === 'atlas-close') return atlas.close()
         if (action === 'refresh') return view({ refresh: true })

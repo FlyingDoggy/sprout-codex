@@ -18,6 +18,8 @@ import { ACTIONS, codexHost, interact, loadPet, observe } from './pet'
 import type { Action } from './pet'
 import { findCodex, limitsOf, readRateLimits } from './quota'
 import { atlasHtml, panelHtml } from './view'
+import { DialogueEngine } from './dialogue'
+import { listPersonalities, selectPersonality } from './personality-config'
 
 type Json = Record<string, any>
 type Context = { threadId?: string; cwd?: string }
@@ -42,6 +44,8 @@ const host = codexHost([
   join(dataDir, 'openai-prices.json'),
 ])
 const tail = createTailer(codexHome)
+const dialogue = new DialogueEngine(dataDir)
+host.chooseLine = choice => dialogue.chooseLine(choice)
 const codex = findCodex()
 let quotaAt = 0
 
@@ -79,6 +83,8 @@ async function refreshQuota(sessions: Awaited<ReturnType<typeof tail>>, now: num
 async function look(context: Context, isForced = false) {
   const now = Date.now()
   const sessions = await tail(now)
+  const current = context.threadId === undefined ? undefined : sessions.find(session => session.session === context.threadId)
+  await dialogue.prepare(context.threadId, current?.task)
   void refreshQuota(sessions, now, isForced).catch(() => {})
   if (isForced) void runScan($, host)
   const model = await readModel($, host)
@@ -109,16 +115,19 @@ async function act(action: unknown, context: Context) {
   if (!ACTIONS.includes(action as Action)) throw new Error(`action must be one of ${ACTIONS.join(', ')}`)
   await look(context)
   await interact($, action as Action, await readModel($, host))
+  const model = await readModel($, host)
+  await dialogue.press(action as Action, action === 'roast' ? model.moodKey : model.pet.line?.bucket ?? String(action), model.now)
 }
 
 async function view(args: Json, context: Context) {
   if (typeof args.lang === 'string') language = langOf(undefined, args.lang)
+  if (typeof args.persona === 'string') await selectPersonality(dataDir, args.persona)
   if (args.range === '30' || args.range === 'all') await setRange($, args.range)
   if (args.action !== undefined) await act(args.action, context)
   const project = await look(context, args.refresh === true)
   const { model, sections } = await panelHtml($, host, typeof args.width === 'number' ? args.width : 400, project)
 
-  return { content: [{ type: 'text', text: 'ok' }], structuredContent: { sections, ...(args.atlas === true ? { atlas: atlasHtml(model) } : {}) } }
+  return { content: [{ type: 'text', text: 'ok' }], structuredContent: { sections, ...(args.atlas === true ? { atlas: atlasHtml(model) } : {}), ...(args.menu === true ? { menu: await listPersonalities(dataDir) } : {}) } }
 }
 
 const chat = {
@@ -156,6 +165,8 @@ const TOOLS = [
         action: { type: 'string', enum: ACTIONS },
         atlas: { type: 'boolean' },
         refresh: { type: 'boolean' },
+        menu: { type: 'boolean' },
+        persona: { type: 'string' },
         ...chat,
       },
     },
@@ -175,6 +186,7 @@ async function call(name: string, args: Json, meta: Json | undefined) {
   return { content: [{ type: 'text', text: t(`小苗：「${model.text}」`, `Miao: "${model.text}"`) }], structuredContent: { ...context } }
 }
 
+let calls: Promise<unknown> = Promise.resolve()
 async function answer(method: string, params: Json): Promise<Json> {
   switch (method) {
     case 'initialize':
@@ -185,7 +197,9 @@ async function answer(method: string, params: Json): Promise<Json> {
       return { tools: TOOLS }
     case 'tools/call':
       try {
-        return await call(String(params.name), (params.arguments ?? {}) as Json, params._meta as Json | undefined)
+        const result = calls.then(() => call(String(params.name), (params.arguments ?? {}) as Json, params._meta as Json | undefined))
+        calls = result.catch(() => {})
+        return await result
       } catch (error) {
         return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }] }
       }

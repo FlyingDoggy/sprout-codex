@@ -2,6 +2,8 @@
 // its time and its counts are kept: never a prompt, a command or its output.
 import { open, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { classifyTask, userRequest } from './task-context'
+import type { TaskContext } from './personas'
 
 export type WorkEvent = 'compact' | 'test_failed' | 'test_passed' | 'done' | 'interrupted' | 'approval'
 
@@ -14,6 +16,7 @@ export type Activity = {
 }
 
 export type SessionState = {
+  task?: TaskContext
   session: string
   parent: string
   cwd: string
@@ -37,7 +40,7 @@ const FRESH_MS = 5 * 60_000
 const EVENT_MS = 90_000
 const TAIL_BYTES = 512 * 1024
 const HEAD_BYTES = 256 * 1024
-const RELEVANT = /session_meta|turn_context|compacted|task_started|task_complete|turn_aborted|item_completed|token_count/
+const RELEVANT = /session_meta|turn_context|compacted|task_started|task_complete|turn_aborted|item_completed|token_count|user_message|response_item/
 
 export const freshSession = (): SessionState => ({
   session: '',
@@ -80,6 +83,11 @@ export function consumeRecord(state: SessionState, record: Json) {
     state.isAgent = !!p.source?.subagent
     state.parent = typeof p.source?.subagent?.thread_spawn?.parent_thread_id === 'string' ? p.source.subagent.thread_spawn.parent_thread_id : ''
     if (typeof p.cwd === 'string') state.cwd = p.cwd
+    return
+  }
+  const request = userRequest(record)
+  if (request !== undefined) {
+    if (Number.isFinite(at) && at > (state.task?.at ?? 0)) state.task = classifyTask(request, at, state.task)
     return
   }
   if (!Number.isFinite(at) || at < state.updatedAt) return

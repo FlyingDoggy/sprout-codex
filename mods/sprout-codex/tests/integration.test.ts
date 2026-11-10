@@ -70,7 +70,14 @@ test('stdio plugin calculates historical costs and retains pet state across proc
       const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('dist/cli.js'), 'mcp'], env: { SPROUT_CODEX_HOME: root, SPROUT_DATA_DIR: join(root, 'state'), SPROUT_GITHUB: '0', SPROUT_LIVE_QUOTA: '0', SPROUT_PRICE_REFRESH: '0' }, stderr: 'pipe' })
       try {
         await client.connect(transport)
-        const { structuredContent: d } = await client.callTool({ name: 'sprout_status', arguments: {}, _meta:{'x-codex-turn-metadata':JSON.stringify({thread_id:'alpha'})} })
+        const request = { name: 'sprout_status', arguments: {}, _meta:{'x-codex-turn-metadata':JSON.stringify({thread_id:'alpha'})} }
+        let result = await client.callTool(request)
+        const deadline = Date.now() + 3000
+        while ((result.structuredContent as any).usage.loading && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 10))
+          result = await client.callTool(request)
+        }
+        const d = result.structuredContent
         assert.equal((d as any).usage.totals.total, 1_100_000)
         assert.equal((d as any).usage.totals.costUsd, 2.05)
         assert.equal((d as any).pet.fed, run)

@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { getQuota, normalizeQuota, readRateLimits } from '../src/server/codex'
+import { companion } from '../src/core/companion'
+import { demoDashboard } from '../src/server/demo'
 
 const now = 1794268800000
 test('quota supports arbitrary windows, multiple buckets and snake_case session payloads', () => {
@@ -13,6 +15,18 @@ test('quota supports arbitrary windows, multiple buckets and snake_case session 
 test('expired and malformed quotas never look like refreshed zero usage', () => {
   assert.deepEqual(normalizeQuota({ primary: { used_percent: 55, window_minutes: 300, resets_at: now / 1000 - 1 } }, now, now), [])
   assert.deepEqual(normalizeQuota({ primary: { used_percent: '55', window_minutes: 300 } }, now, now), [])
+})
+test('historical RFC3339 and relative reset times use the observation timestamp; unknown resets expire too', () => {
+  for (const raw of [{ resets_at: new Date(now+60_000).toISOString() }, { resets_in_seconds:60 }, { resetsAt:(now+60_000)/1000 }]) {
+    const quota = normalizeQuota({primary:{used_percent:100,window_minutes:300,...raw}},now,now+1000)
+    assert.equal(quota[0].resetsAt,now+60_000)
+    assert.deepEqual(normalizeQuota({primary:{used_percent:100,window_minutes:300,...raw}},now,now+60_001),[])
+  }
+  const unknown=normalizeQuota({primary:{used_percent:100,window_minutes:300,resets_at:null}},now,now)
+  assert.equal(unknown[0].resetsAt,null,'an expiry bound must not invent an actual reset time')
+  assert.deepEqual(normalizeQuota({primary:{used_percent:100,window_minutes:300,resets_at:null}},now,now+301*60_000),[])
+  const d=demoDashboard(now+301*60_000);d.quota.windows=unknown
+  assert.notEqual(companion(d,now+301*60_000).mood,'sleep','cached unknown reset windows cannot sleep forever')
 })
 test('missing CLI fails cleanly and offline mode retains source attribution', async () => {
   await assert.rejects(readRateLimits('/missing/sprout-codex-binary', undefined, 500), /找不到/)

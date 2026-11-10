@@ -15,8 +15,9 @@ async function main() {
   }
   const options = optionsFromEnv()
   if (process.env.SPROUT_PRICES_FILE) options.prices = await readJson<Prices>(process.env.SPROUT_PRICES_FILE, {})
+  if (command === 'status') { options.live = false; options.github = false; options.refreshPrices = false }
   const service = process.argv.includes('--demo') ? demoService() : new SproutService(options)
-  if (command === 'status') { console.log(JSON.stringify(await service.get(), null, 2)); return }
+  if (command === 'status') { console.log(JSON.stringify(await (service instanceof SproutService ? service.refresh() : service.get()), null, 2)); return }
   const html = await readFile(new URL('./ui.html', import.meta.url), 'utf8')
   if (command === 'mcp') { await runMcp(service, html); return }
   const index = process.argv.indexOf('--port')

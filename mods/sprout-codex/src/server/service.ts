@@ -1,13 +1,13 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdir, rm, stat } from 'node:fs/promises'
-import { dayAt, type Dashboard, type GithubData, type Pet, type PetAction, type Quota, type PanelContext } from '../model'
+import { quotaWindowIsLive, dayAt, type Dashboard, type GithubData, type Pet, type PetAction, type Quota, type PanelContext } from '../model'
 import { activityOf, threadActivity, type ActivityState } from './activity'
 import { folderName } from './context'
 import { interactPet } from '../core/companion'
 import { observePet } from '../core/pet-events'
 import { growthStep, forecast } from '../core/logic'
-import { scanUsage, type Prices } from './usage'
+import { scanUsage, readCachedUsage, type Prices } from './usage'
 import { getQuota } from './codex'
 import { readGithub } from './github'
 import { readJson, writeJson } from './storage'
@@ -36,8 +36,10 @@ async function mutatePet(dataDir: string, change: (pet: Pet) => Pet): Promise<Pe
   }
   try {
     const path = join(dataDir, 'pet.json')
-    const pet = change(await readJson(path, initialPet()))
-    await writeJson(path, pet)
+    const previous = await readJson(path, initialPet())
+    const before = JSON.stringify(previous)
+    const pet = change(previous)
+    if (JSON.stringify(pet) !== before) await writeJson(path, pet)
     return pet
   } finally { await rm(lock, { recursive: true, force: true }) }
 }
@@ -49,57 +51,92 @@ export class SproutService {
   private github?: { at: number; value: GithubData | null; status: string | null }
   private prices?: { at: number; value: Awaited<ReturnType<typeof loadPrices>> }
   private activityStates: ActivityState[] = []
-  constructor(readonly options: Options) {}
+  private bootstrap?: Promise<Dashboard>
+  private scanAt = 0
+  private refreshing = new Map<string, Promise<void>>()
+  private remoteAt: Record<string, number> = {}
+  constructor(readonly options: Options, private readonly deps = { scanUsage, getQuota, readGithub, loadPrices }) {}
+
+  private background(key: string, interval: number, task: () => Promise<void>) {
+    if (this.refreshing.has(key) || Date.now() - (this.remoteAt[key] ?? 0) < interval) return
+    this.remoteAt[key] = Date.now()
+    const work = task().catch(() => {}).finally(() => { this.refreshing.delete(key) })
+    this.refreshing.set(key, work)
+  }
+
+  /** CLI/diagnostics can await local indexing; interactive get() never waits for it. */
+  async refresh(context: PanelContext = {}) {
+    await this.get(true, context)
+    await this.collecting
+    return this.get(false, context)
+  }
+
+  async settled() { await this.collecting; await Promise.all(this.refreshing.values()) }
 
   private contextual(data: Dashboard, context: PanelContext): Dashboard {
     const own = context.threadId ? this.activityStates.filter(s => s.session === context.threadId).sort((a,b) => b.updatedAt-a.updatedAt)[0] : undefined
     return { ...data, context, projectName: folderName(own?.cwd || context.cwd),
-      activity: context.threadId ? activityOf(threadActivity(this.activityStates, context.threadId)) : data.activity }
+      activity: activityOf(context.threadId ? threadActivity(this.activityStates, context.threadId) : this.activityStates) }
   }
 
   async get(force = false, context: PanelContext = {}): Promise<Dashboard> {
-    if (this.collecting) return this.contextual(await this.collecting, context)
-    if (!force && this.snapshot && Date.now() - this.snapshot.updatedAt < 15_000) {
-      this.snapshot.pet = await readJson(join(this.options.dataDir, 'pet.json'), this.snapshot.pet)
-      return this.contextual(this.snapshot, context)
+    if (!this.snapshot) {
+      this.bootstrap ??= this.collect(true)
+      this.snapshot = await this.bootstrap
     }
-    this.collecting = this.collect()
-    try { this.snapshot = await this.collecting; return this.contextual(this.snapshot, context) } finally { this.collecting = undefined }
+    if (!this.collecting && (force || Date.now() - this.scanAt >= 15_000)) {
+      this.scanAt = Date.now()
+      this.collecting = this.collect(false).then(data => this.snapshot = data).catch(() => {
+        this.snapshot!.usage.warnings = ['本机记录暂时无法刷新，保留上次统计。']
+        return this.snapshot!
+      }).finally(() => { this.collecting = undefined })
+    }
+    this.snapshot.pet = await readJson(join(this.options.dataDir, 'pet.json'), this.snapshot.pet)
+    return this.contextual(this.snapshot, context)
   }
 
-  private async collect(): Promise<Dashboard> {
+  private async collect(cached: boolean): Promise<Dashboard> {
     const opts = this.options
-    if (!this.prices || Date.now() - this.prices.at > 3_600_000) {
-      this.prices = { at: Date.now(), value: await loadPrices(opts.dataDir, opts.refreshPrices ?? false, opts.prices) }
-    }
+    this.prices ??= { at: Date.now(), value: await this.deps.loadPrices(opts.dataDir, false, opts.prices) }
+    if (opts.refreshPrices) this.background('prices', 3_600_000, async () => {
+      const value = await this.deps.loadPrices(opts.dataDir, true, opts.prices)
+      if (JSON.stringify(value.prices) !== JSON.stringify(this.prices!.value.prices)) this.scanAt = 0
+      this.prices = { at: Date.now(), value }
+    })
     const pricing = this.prices.value
-    const usage = await scanUsage(opts.codexHome, opts.dataDir, opts.timezone, pricing.prices)
-    const quotaTask = async () => {
-      if (!this.quota || Date.now() - this.quota.at > 60_000) {
-        const value = await getQuota(opts, usage.lastQuota)
+    const usage = cached ? await readCachedUsage(opts.dataDir, opts.timezone)
+      : await this.deps.scanUsage(opts.codexHome, opts.dataDir, opts.timezone, pricing.prices)
+    if (!this.quota) this.quota = await readJson(join(opts.dataDir, 'quota.json'), undefined)
+    const fallback = await getQuota({ ...opts, live: false }, usage.lastQuota)
+    const liveWindows = this.quota?.value.windows.filter(w => quotaWindowIsLive(w)) ?? []
+    const cachedAt = Math.max(0, ...liveWindows.map(w => w.observedAt))
+    const fallbackAt = Math.max(0, ...fallback.windows.map(w => w.observedAt))
+    const quota: Quota = liveWindows.length && cachedAt >= fallbackAt ? { ...this.quota!.value, windows: liveWindows } : fallback
+    if (opts.live) this.background('quota', 60_000, async () => {
+      const value = await this.deps.getQuota(opts, usage.lastQuota)
+      if (value.windows.length && Math.max(...value.windows.map(w => w.observedAt)) >= Math.max(0, ...(this.quota?.value.windows.filter(w => quotaWindowIsLive(w)).map(w => w.observedAt) ?? []))) {
         this.quota = { at: Date.now(), value }
+        await writeJson(join(opts.dataDir, 'quota.json'), this.quota)
       }
-      return this.quota.value
+    })
+    if (!this.github) {
+      const saved = opts.github ? await readJson<GithubData | null>(join(opts.dataDir, 'github.json'), null) : null
+      this.github = { at: saved?.fetchedAt ?? 0, value: saved, status: opts.github ? null : 'GitHub 统计未启用。' }
     }
-    const githubTask = async () => {
-      if (!opts.github) return { value: null, status: 'GitHub 统计未启用。' }
-      if (!this.github) {
-        const saved = await readJson<GithubData | null>(join(opts.dataDir, 'github.json'), null)
-        if (saved) this.github = { at: usage.firstDay && saved.mergesFrom !== usage.firstDay ? 0 : saved.fetchedAt, value: saved, status: null }
-      }
-      if (!this.github || Date.now() - this.github.at > 30 * 60_000) {
+    if (opts.github && !usage.loading && (!this.github.value || Date.now() - this.github.at > 30 * 60_000 || usage.firstDay && usage.firstDay !== this.github.value.mergesFrom)) {
+      this.background('github', 30 * 60_000, async () => {
         try {
-          const value = await readGithub(opts.timezone, Date.now(), usage.firstDay ?? undefined)
-          await writeJson(join(opts.dataDir, 'github.json'), value)
+          const value = await this.deps.readGithub(opts.timezone, Date.now(), usage.firstDay ?? undefined)
           this.github = { at: Date.now(), value, status: null }
-        } catch { this.github = { at: Date.now(), value: this.github?.value ?? null, status: 'GitHub 暂不可用，请检查 gh 的 github.com 登录状态。' } }
-      }
-      return this.github
+          await writeJson(join(opts.dataDir, 'github.json'), value)
+        } catch { this.github!.status = 'GitHub 暂不可用，请检查 gh 的 github.com 登录状态。' }
+      })
     }
-    const [quota, github] = await Promise.all([quotaTask(), githubTask()])
+    const github = this.github
     const samplesPath = join(opts.dataDir, 'quota-samples.json')
     const samples = await readJson<Record<string, { at: number; pct: number }[]>>(samplesPath, {})
-    const windows = quota.windows.filter(w => w.resetsAt === null || w.resetsAt > Date.now()).map(window => {
+    const previousSamples = JSON.stringify(samples)
+    const windows = quota.windows.filter(w => quotaWindowIsLive(w)).map(window => {
       const key = `${window.id}:${window.resetsAt}`
       const history = (samples[key] ?? []).filter(p => p.at > Date.now() - 8 * 86_400_000)
       if (!history.some(p => p.at === window.observedAt)) history.push({ at: window.observedAt, pct: window.usedPercent })
@@ -109,8 +146,9 @@ export class SproutService {
       return { ...window, projected: fc?.projected ?? null, forecast: fc ? { fullAt: fc.fullAt, basis: fc.basis } : undefined }
     })
     for (const key of Object.keys(samples)) if (!samples[key].some(p => p.at > Date.now() - 8 * 86_400_000)) delete samples[key]
-    await writeJson(samplesPath, samples)
+    if (JSON.stringify(samples) !== previousSamples) await writeJson(samplesPath, samples)
     const pet = await mutatePet(opts.dataDir, pet => {
+      if (usage.loading) return pet
       const growth = growthStep(pet.initialized ? pet.highest : null, usage.totals.total)
       const latest = github.value?.latestMerge
       const isMerge = latest && latest.at > (pet.lastMergeAt ?? 0) && Date.now() - latest.at < (pet.lastMergeAt === undefined ? 10 * 60_000 : 6 * 3_600_000)

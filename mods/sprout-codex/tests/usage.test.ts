@@ -16,7 +16,7 @@ test('repeated cumulative snapshots, stale events, and copied histories count on
   consumeLine(scan, context)
   consumeLine(scan, event('2026-11-09T23:50:00Z', 100, 20, 50, 5))
   consumeLine(scan, event('2026-11-09T23:51:00Z', 100, 20, 50, 5))
-  consumeLine(scan, event('2026-11-09T23:52:00Z', 90, 10, 40, 2))
+  consumeLine(scan, event('2026-11-09T23:49:00Z', 90, 10, 40, 2))
   consumeLine(scan, event('2026-11-10T16:01:00Z', 150, 30, 70, 9))
   const result = aggregate([scan, structuredClone(scan)], 'Asia/Shanghai', { 'test-model': { input: 2, cached: 1, output: 4 } })
   assert.equal(result.totals.total, 180)
@@ -48,7 +48,8 @@ test('partial pricing retains known costs and reports token coverage without hid
 })
 test('request context is taken from the last usage, never the growing session total', () => {
   const scan = freshScan()
-  consumeLine(scan, JSON.stringify({ type: 'turn_context', payload: { model: 'test-model', service_tier: 'priority' } }))
+  consumeLine(scan, JSON.stringify({ type: 'event_msg', payload: { type: 'thread_settings_applied', thread_settings: { model: 'test-model', service_tier: 'priority' } } }))
+  consumeLine(scan, context)
   for (let i = 1; i <= 3; i++) {
     const row = JSON.parse(event(`2026-11-10T00:0${i}:00Z`, i * 200_000, i * 100))
     row.payload.info.last_token_usage = { input_tokens: 200_000, output_tokens: 100 }

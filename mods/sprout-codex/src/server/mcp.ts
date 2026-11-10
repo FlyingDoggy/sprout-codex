@@ -1,3 +1,4 @@
+import manifest from '../../package.json'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { registerAppTool, registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server'
@@ -9,7 +10,7 @@ import type { DashboardService } from './http'
 import { PET_ACTIONS, type PanelContext, type PetAction } from '../model'
 
 export function createMcpServer(service: DashboardService, html: string) {
-  const server = new McpServer({ name: 'sprout-codex', version: '0.4.1' })
+  const server = new McpServer({ name: 'sprout-codex', version: manifest.version })
   const uri = 'ui://sprout/dashboard-port-v1.html'
   const contextSchema = { cwd: z.string().max(4096).optional().describe('当前聊天的项目工作目录，用于右上角显示文件夹名。'), threadId: z.string().max(200).optional().describe('当前聊天 ID；面板刷新时保留。') }
   async function contextOf(args: PanelContext, meta?: Record<string, unknown>) {

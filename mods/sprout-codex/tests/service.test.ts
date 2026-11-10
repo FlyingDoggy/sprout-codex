@@ -15,10 +15,12 @@ test('roasts cycle contextual lines and survive restarts without changing counte
     // A 0.2.0 pet has no line or celebration fields.
     await writeFile(join(opts.dataDir, 'pet.json'), JSON.stringify({ fed: 7, patted: 9, highest: 2, action: null, actionAt: 0 }))
     const service = new SproutService(opts)
-    const before = await service.get()
+    const before = await service.refresh()
     const first = await service.interact('roast')
     const firstText = companion({ ...before, pet: first }).text
-    const second = await new SproutService(opts).interact('roast')
+    const restarted = new SproutService(opts)
+    const second = await restarted.interact('roast')
+    await restarted.settled()
     assert.notEqual(companion({ ...before, pet: second }).text, firstText)
     assert.equal(second.line!.index, first.line!.index + 1)
     assert.equal(second.fed, 7); assert.equal(second.patted, 9); assert.equal(second.highest, 2)
@@ -59,7 +61,7 @@ test('pet interactions persist across instances without lost concurrent writes',
     const opts: Options = { codexHome: root, dataDir: join(root, 'state'), timezone: 'Asia/Shanghai', binary: 'codex', live: false, github: false, prices: {} }
     const services = [new SproutService(opts), new SproutService(opts)]
     await Promise.all(Array.from({ length: 8 }, (_, i) => services[i % 2].interact(i % 2 ? 'pat' : 'feed')))
-    const dashboard = await new SproutService(opts).get()
+    const dashboard = await new SproutService(opts).refresh()
     assert.equal(dashboard.pet.fed, 4)
     assert.equal(dashboard.pet.patted, 4)
     assert.equal(dashboard.usage.totals.total, 0)
@@ -77,11 +79,11 @@ test('growth imports old and archived history, deduplicates forks, and persists 
     await writeFile(join(root, 'sessions/fork.jsonl'), old)
     await writeFile(join(root, 'sessions/recent.jsonl'), record(new Date().toISOString(), 1000))
     const opts: Options = { codexHome: root, dataDir: join(root, 'state'), timezone: 'UTC', binary: 'codex', live: false, github: false, prices: {} }
-    const first = await new SproutService(opts).get()
+    const first = await new SproutService(opts).refresh()
     assert.equal(first.pet.highest, 2)
     assert.equal(first.usage.totals.total, 20_000_001_200)
     assert.equal(first.usage.firstDay, '2025-01-01')
-    assert.deepEqual((await new SproutService(opts).get()).usage.totals, first.usage.totals)
+    assert.deepEqual((await new SproutService(opts).refresh()).usage.totals, first.usage.totals)
     assert.equal((await new SproutService(opts).interact('feed')).highest, 2)
   } finally { await rm(root, { recursive: true, force: true }) }
 })

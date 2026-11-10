@@ -52,7 +52,7 @@ function connect() {
   }
 }
 async function init(client) {
-  await client.call('initialize', { clientInfo: { name: 'sprout_smoke', version: '0.1.0' }, capabilities: null })
+  await client.call('initialize', { clientInfo: { name: 'sprout_smoke', version: '0.2.0' }, capabilities: null })
   client.notify('initialized')
 }
 let client

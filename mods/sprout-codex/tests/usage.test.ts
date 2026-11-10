@@ -9,7 +9,7 @@ const event = (at: string, input: number, output: number, cached = 0, reasoning 
 const context = JSON.stringify({ type: 'turn_context', payload: { model: 'test-model' } })
 
 test('cached input and reasoning output are subsets, not additional tokens', () => {
-  assert.deepEqual(tokenUsage({ input_tokens: 100, cached_input_tokens: 80, output_tokens: 50, reasoning_output_tokens: 30 }), { input: 100, cached: 80, output: 50, reasoning: 30, total: 150 })
+  assert.deepEqual(tokenUsage({ input_tokens: 100, cached_input_tokens: 80, output_tokens: 50, reasoning_output_tokens: 30 }), { input: 100, cached: 80, cacheWrite: 0, output: 50, reasoning: 30, total: 150 })
 })
 test('repeated cumulative snapshots, stale events, and copied histories count once', () => {
   const scan = freshScan()
@@ -32,6 +32,32 @@ test('missing pricing stays unknown and zero usage remains empty', () => {
   assert.equal(result.totals.costUsd, null)
   assert.deepEqual(result.unpricedModels, ['unknown'])
   assert.equal(aggregate([], 'UTC').firstDay, null)
+})
+test('partial pricing retains known costs and reports token coverage without hiding unknown models', () => {
+  const scan = freshScan()
+  consumeLine(scan, context)
+  consumeLine(scan, event('2026-11-10T00:00:00Z', 100, 10))
+  consumeLine(scan, JSON.stringify({ type: 'turn_context', payload: { model: 'unpublished' } }))
+  consumeLine(scan, event('2026-11-10T00:01:00Z', 200, 20))
+  const data = aggregate([scan], 'UTC', { 'test-model': { input: 2, cached: 1, output: 4 } })
+  assert.equal(data.totals.costUsd, null)
+  assert.equal(data.days[0].knownCostUsd, 0.00024)
+  assert.equal(data.days[0].pricedTokens, 110)
+  assert.equal(data.totals.total, 220)
+  assert.deepEqual(data.unpricedModels, ['unpublished'])
+})
+test('request context is taken from the last usage, never the growing session total', () => {
+  const scan = freshScan()
+  consumeLine(scan, JSON.stringify({ type: 'turn_context', payload: { model: 'test-model', service_tier: 'priority' } }))
+  for (let i = 1; i <= 3; i++) {
+    const row = JSON.parse(event(`2026-11-10T00:0${i}:00Z`, i * 200_000, i * 100))
+    row.payload.info.last_token_usage = { input_tokens: 200_000, output_tokens: 100 }
+    consumeLine(scan, JSON.stringify(row))
+  }
+  const data = aggregate([scan], 'UTC', { 'test-model': { input: 1, cached: 0, output: 1, long: { input: 9, cached: 0, output: 9 }, tiers: { fast: { input: 2, cached: 0, output: 2, long: { input: 18, cached: 0, output: 18 } } } } })
+  assert.ok(Math.abs(data.totals.costUsd! - 1.2006) < 1e-12)
+  assert.equal(data.costAssumptions.standardTierEvents, 0)
+  assert.equal(data.costAssumptions.shortContextEvents, 0)
 })
 test('incremental scans handle incomplete tails, archive moves, truncation and deletion', async () => {
   const root = await mkdtemp(join(tmpdir(), 'sprout-usage-'))

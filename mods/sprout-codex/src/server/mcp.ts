@@ -6,7 +6,7 @@ import { formatTokens } from '../core/logic'
 import type { DashboardService } from './http'
 
 export function createMcpServer(service: DashboardService, html: string) {
-  const server = new McpServer({ name: 'sprout-codex', version: '0.1.0' })
+  const server = new McpServer({ name: 'sprout-codex', version: '0.2.0' })
   const uri = 'ui://sprout/dashboard-v1.html'
   registerAppTool(server, 'sprout_status', {
     title: '打开小苗', description: '查看本机 Codex 用量、订阅额度、GitHub 贡献和像素宠物；在兼容客户端打开交互面板。从本机日志提取用量字段，只返回汇总数据，不返回对话正文。',

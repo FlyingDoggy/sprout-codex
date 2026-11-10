@@ -5,11 +5,12 @@ import { setLang } from '../core/i18n'
 import { capsuleSvg, trendSvg, usageHeatmapSvg, githubHeatmapSvg, mergesSvg } from '../core/panels'
 import { addDays, calendar, formatTokens, formatUsd, mergeCalendar, pipsFor, streakOf } from '../core/logic'
 import { esc } from '../core/svg-kit'
+import { levelInfo, MAX_LEVEL } from '../core/levels'
 
 setLang('zh')
 const root = document.getElementById('app')!
 let dashboard: Dashboard | null = null
-let range: '30' | 'all' = '30'
+let range: '30' | 'all' = 'all'
 let busy = false
 let toast = ''
 let actionTimer: ReturnType<typeof setTimeout> | undefined
@@ -35,6 +36,11 @@ function render() {
   const input = days.reduce((sum, day) => sum + day.input, 0)
   const cached = days.reduce((sum, day) => sum + day.cached, 0)
   const cost = days.some(day => day.costUsd === null) ? null : days.reduce((sum, day) => sum + (day.costUsd ?? 0), 0)
+  const knownCost = days.reduce((sum, day) => sum + day.knownCostUsd, 0)
+  const pricedTokens = days.reduce((sum, day) => sum + day.pricedTokens, 0)
+  const level = levelInfo(d.pet.highest)
+  const next = d.pet.highest < MAX_LEVEL ? levelInfo(d.pet.highest + 1) : null
+  const growth = next ? Math.max(0, Math.min(1, (d.usage.totals.total / 1e9 - level.thresholdB) / (next.thresholdB - level.thresholdB))) : 1
   const streak = streakOf(d.usage.days.filter(day => day.total > 0).map(day => day.day), d.today)
   const todayTokens = d.usage.days.find(day => day.day === d.today)?.total ?? 0
   const action = Date.now() - d.pet.actionAt < 1600 ? d.pet.action : null
@@ -55,10 +61,12 @@ function render() {
       <div class="pet-scene" role="img" aria-label="小苗，等级 ${d.pet.highest}，${action === 'feed' ? '正在喝水' : action === 'pat' ? '被摸摸' : '陪伴中'}">${sceneSvg({ width, mood, action, isConfetti: false, level: d.pet.highest, pips: pipsFor(d.pet.highest, d.usage.totals.total), isDay: hour >= 7 && hour < 19, rows, isPop: action !== null })}</div>
       <div class="pet-actions"><button id="feed" ${busy ? 'disabled' : ''}>喂水</button><button id="pat" ${busy ? 'disabled' : ''}>摸摸</button><span class="pet-count">喂水 ${d.pet.fed} · 摸摸 ${d.pet.patted}</span></div>
       <div class="toast" role="status" aria-live="polite">${esc(toast)}</div>
+      <section class="growth" aria-label="历史累计成长值"><div class="growth-head"><span>历史累计成长值</span><strong title="${d.usage.totals.total.toLocaleString()} Token">${formatTokens(d.usage.totals.total)} <small>Token</small></strong></div><progress aria-label="升级进度" value="${growth}" max="1"></progress><div class="growth-caption"><span>Lv${level.lv} ${level.name}</span><span>${next ? `${(growth * 100).toFixed(1)}% · Lv${next.lv} 需 ${formatTokens(next.thresholdB * 1e9)}` : '已长成传说金树'}</span></div><p class="note">${d.usage.firstDay ? `已计入 ${d.usage.firstDay} 起的全部本机历史及归档记录。` : '找到本机历史记录后自动计入。'}成长值不受下方时间筛选影响。</p></section>
       <section class="section"><div class="section-head"><h2>订阅额度</h2><span class="note">${d.quota.source === 'live' ? '实时读取' : d.quota.source === 'session' ? '最近会话' : ''}</span></div>${quota || '<div class="empty">暂无额度读数。使用已登录订阅账号的 Codex 后刷新。</div>'}${d.quota.message ? `<p class="note">${esc(d.quota.message)}</p>` : ''}</section>
       <section class="section"><div class="section-head"><h2>${range === '30' ? '最近 30 天' : '全部记录'}</h2><div class="range" aria-label="统计范围"><button id="range30" aria-pressed="${range === '30'}">30 天</button><button id="rangeAll" aria-pressed="${range === 'all'}">全部</button></div></div>
-        <dl class="tiles"><div class="tile"><dt>Token 用量</dt><dd>${formatTokens(tokens)}</dd></div><div class="tile"><dt>按 API 价格估算</dt><dd class="${cost === null ? 'unpriced' : ''}">${cost === null ? '未配置价格' : formatUsd(cost)}</dd></div><div class="tile"><dt>连续使用</dt><dd>${streak}<small>天</small></dd></div><div class="tile"><dt>缓存命中</dt><dd>${input ? (cached / input * 100).toFixed(1) : '—'}<small>${input ? '%' : ''}</small></dd></div></dl>
-        <div class="status-line">今天 <strong>${formatTokens(todayTokens)}</strong> Token · 本机 <strong>${d.usage.files}</strong> 份会话记录<br>费用估算与订阅账单分开；未配置价格的模型不计作零费用。</div>
+        <dl class="tiles"><div class="tile"><dt>Token 用量</dt><dd>${formatTokens(tokens)}</dd></div><div class="tile"><dt>API 等价费用 · USD</dt><dd class="${cost === null && !pricedTokens ? 'unpriced' : ''}">${cost !== null ? formatUsd(cost) : pricedTokens ? `≥${formatUsd(knownCost)}` : '单价未知'}</dd></div><div class="tile"><dt>连续使用</dt><dd>${streak}<small>天</small></dd></div><div class="tile"><dt>缓存命中</dt><dd>${input ? (cached / input * 100).toFixed(1) : '—'}<small>${input ? '%' : ''}</small></dd></div></dl>
+        <div class="status-line">今天 <strong>${formatTokens(todayTokens)}</strong> Token · 本机 <strong>${d.usage.files}</strong> 份会话记录<br>按 OpenAI 官网当前单价回算；这是 API 等价估值，不是订阅账单。${cost === null ? `<br>已计价 ${tokens ? (pricedTokens / tokens * 100).toFixed(1) : 100}% Token，未知单价部分未计入。` : ''}</div>
+        <details class="pricing-details"><summary>价格来源与模型明细</summary><p class="note">官网单价核验于 ${time(d.pricing.checkedAt)}。按单次请求区分 ≤272K / &gt;272K 上下文，输入、缓存命中、缓存写入和输出分别计价。</p><button class="text-button" id="pricing-source">查看 OpenAI 官方价格</button>${d.pricing.warning ? `<p class="note">${esc(d.pricing.warning)}</p>` : ''}${d.pricing.customModels.length ? `<p class="note">自定义单价覆盖：${d.pricing.customModels.map(esc).join('、')}</p>` : ''}<p class="note">以下为全部历史。${d.usage.costAssumptions.standardTierEvents ? '日志未记录服务档位的请求按 Standard 价估算。' : ''}${d.usage.costAssumptions.shortContextEvents ? ` ${d.usage.costAssumptions.shortContextEvents} 条增量缺少单次上下文，按短上下文估算。` : ''}${d.usage.costAssumptions.defaultCacheWriteEvents ? ' 缓存写入时长未记录，按默认 30 分钟估算。' : ''}不含工具调用费用及地区附加费。</p><table><thead><tr><th>模型</th><th>Token</th><th>USD 估值</th></tr></thead><tbody>${d.usage.models.map(model => `<tr><td>${esc(model.model)}</td><td>${formatTokens(model.tokens)}</td><td>${model.costUsd === null ? model.knownCostUsd ? `≥${formatUsd(model.knownCostUsd)}` : '未知' : formatUsd(model.costUsd)}</td></tr>`).join('')}</tbody></table></details>
       </section>
     </div><div class="column">
       <section class="section"><div class="section-head"><h2>每日 Token</h2><span class="note">${range === '30' ? '最近 30 天' : '全部'}</span></div><div class="chart" role="img" aria-label="每日 Token 用量趋势">${svg(trendSvg(width, chartDays, false))}</div></section>
@@ -95,6 +103,10 @@ root.addEventListener('click', async event => {
   const id = (event.target as HTMLElement).closest('button')?.id
   if (id === 'range30' || id === 'rangeAll') { range = id === 'range30' ? '30' : 'all'; render() }
   if (id === 'refresh') await refresh(true)
+  if (id === 'pricing-source' && dashboard) {
+    if (app) await app.openLink({ url: dashboard.pricing.sourceUrl })
+    else window.open(dashboard.pricing.sourceUrl, '_blank', 'noopener,noreferrer')
+  }
   if ((id === 'feed' || id === 'pat') && dashboard && !busy) {
     busy = true; render()
     try {
@@ -111,7 +123,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
 
 async function start() {
   if (embedded) {
-    app = new App({ name: 'Sprout Codex', version: '0.1.0' }, {})
+    app = new App({ name: 'Sprout Codex', version: '0.2.0' }, {})
     app.ontoolresult = result => { const data = result.structuredContent as Dashboard | undefined; if (data?.version === 1) { dashboard = data; render() } }
     app.onhostcontextchanged = context => { if (context.theme) { theme = context.theme; document.documentElement.dataset.theme = theme; render() } }
     await app.connect()

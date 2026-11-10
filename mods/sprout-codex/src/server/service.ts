@@ -7,13 +7,14 @@ import { scanUsage, type Prices } from './usage'
 import { getQuota } from './codex'
 import { readGithub } from './github'
 import { readJson, writeJson } from './storage'
+import { loadPrices } from './pricing'
 
-export type Options = { codexHome: string; dataDir: string; timezone: string; binary: string; live: boolean; github: boolean; prices: Prices }
+export type Options = { codexHome: string; dataDir: string; timezone: string; binary: string; live: boolean; github: boolean; prices: Prices; refreshPrices?: boolean }
 export function optionsFromEnv(): Options {
   const codexHome = process.env.SPROUT_CODEX_HOME ?? process.env.CODEX_HOME ?? join(homedir(), '.codex')
   const timezone = process.env.SPROUT_TIMEZONE ?? Intl.DateTimeFormat().resolvedOptions().timeZone
   dayAt(Date.now(), timezone)
-  return { codexHome, dataDir: process.env.SPROUT_DATA_DIR ?? join(codexHome, 'sprout'), timezone, binary: process.env.SPROUT_CODEX_BIN ?? 'codex', live: process.env.SPROUT_LIVE_QUOTA !== '0', github: process.env.SPROUT_GITHUB !== '0', prices: {} }
+  return { codexHome, dataDir: process.env.SPROUT_DATA_DIR ?? join(codexHome, 'sprout'), timezone, binary: process.env.SPROUT_CODEX_BIN ?? 'codex', live: process.env.SPROUT_LIVE_QUOTA !== '0', github: process.env.SPROUT_GITHUB !== '0', prices: {}, refreshPrices: process.env.SPROUT_PRICE_REFRESH !== '0' }
 }
 
 const initialPet = (): Pet => ({ fed: 0, patted: 0, highest: 1, action: null, actionAt: 0 })
@@ -42,6 +43,7 @@ export class SproutService {
   private collecting?: Promise<Dashboard>
   private quota?: { at: number; value: Quota }
   private github?: { at: number; value: GithubData | null; status: string | null }
+  private prices?: { at: number; value: Awaited<ReturnType<typeof loadPrices>> }
   constructor(readonly options: Options) {}
 
   async get(force = false): Promise<Dashboard> {
@@ -56,7 +58,11 @@ export class SproutService {
 
   private async collect(): Promise<Dashboard> {
     const opts = this.options
-    const usage = await scanUsage(opts.codexHome, opts.dataDir, opts.timezone, opts.prices)
+    if (!this.prices || Date.now() - this.prices.at > 3_600_000) {
+      this.prices = { at: Date.now(), value: await loadPrices(opts.dataDir, opts.refreshPrices ?? false, opts.prices) }
+    }
+    const pricing = this.prices.value
+    const usage = await scanUsage(opts.codexHome, opts.dataDir, opts.timezone, pricing.prices)
     const quotaTask = async () => {
       if (!this.quota || Date.now() - this.quota.at > 60_000) {
         const value = await getQuota(opts, usage.lastQuota)
@@ -95,7 +101,7 @@ export class SproutService {
     await writeJson(samplesPath, samples)
     const pet = await mutatePet(opts.dataDir, pet => ({ ...pet, highest: Math.max(pet.highest, levelForTokens(usage.totals.total)) }))
     const { lastQuota: _, ...publicUsage } = usage
-    return { version: 1, updatedAt: Date.now(), today: dayAt(Date.now(), opts.timezone), timezone: opts.timezone, usage: publicUsage, quota: { ...quota, windows }, pet, github: github.value, githubStatus: github.status, demo: false }
+    return { version: 1, updatedAt: Date.now(), today: dayAt(Date.now(), opts.timezone), timezone: opts.timezone, usage: publicUsage, pricing: pricing.info, quota: { ...quota, windows }, pet, github: github.value, githubStatus: github.status, demo: false }
   }
 
   async interact(action: 'feed' | 'pat'): Promise<Pet> {

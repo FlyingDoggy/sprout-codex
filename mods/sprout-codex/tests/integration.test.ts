@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile, mkdtemp, copyFile, writeFile, rm } from 'node:fs/promises'
+import { readFile, mkdtemp, copyFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { get } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -21,6 +21,7 @@ test('MCP stdio handshake, dashboard data, UI resource and pet action work end t
     await client.connect(transport)
     const tools = await client.listTools()
     assert.deepEqual(tools.tools.map(tool => tool.name).sort(), ['sprout_interact', 'sprout_status'])
+    assert.deepEqual(tools.tools.find(tool => tool.name === 'sprout_status')?._meta?.['openai/ui'], { entrypoints: [{ type: 'thread' }, { type: 'global' }] })
     const status = await client.callTool({ name: 'sprout_status', arguments: {} })
     assert.equal((status.structuredContent as any).demo, true)
     const resource = await client.readResource({ uri: 'ui://sprout/dashboard-v1.html' })
@@ -32,6 +33,29 @@ test('MCP stdio handshake, dashboard data, UI resource and pet action work end t
     const invalid = await client.callTool({ name: 'sprout_interact', arguments: { action: 'delete' } })
     assert.equal(invalid.isError, true)
   } finally { await client.close(); await rm(packaged, { recursive: true, force: true }) }
+})
+
+test('stdio plugin calculates historical costs and retains pet state across process restarts without HTTP', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'sprout-restart-'))
+  try {
+    await mkdir(join(root, 'archived_sessions'))
+    await writeFile(join(root, 'archived_sessions/history.jsonl'), [
+      { type: 'turn_context', payload: { model: 'gpt-6.1-sol' } },
+      { timestamp: '2025-01-01T00:00:00Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 1_000_000, cached_input_tokens: 500_000, output_tokens: 100_000 } } } },
+    ].map(row => JSON.stringify(row)).join('\n') + '\n')
+    for (let run = 0; run < 2; run++) {
+      const client = new Client({ name: 'sprout-restart', version: '1.0.0' })
+      const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('dist/cli.js'), 'mcp'], env: { SPROUT_CODEX_HOME: root, SPROUT_DATA_DIR: join(root, 'state'), SPROUT_GITHUB: '0', SPROUT_LIVE_QUOTA: '0', SPROUT_PRICE_REFRESH: '0' }, stderr: 'pipe' })
+      try {
+        await client.connect(transport)
+        const { structuredContent: d } = await client.callTool({ name: 'sprout_status', arguments: {} })
+        assert.equal((d as any).usage.totals.total, 1_100_000)
+        assert.equal((d as any).usage.totals.costUsd, 2.05)
+        assert.equal((d as any).pet.fed, run)
+        if (run === 0) await client.callTool({ name: 'sprout_interact', arguments: { action: 'feed' } })
+      } finally { await client.close() }
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test('standalone UI serves data and rejects cross-origin and rebinding requests', async () => {

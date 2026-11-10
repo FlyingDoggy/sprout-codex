@@ -1,4 +1,4 @@
-> **Codex fork:** This repository adds [Sprout for Codex](mods/sprout-codex/README.md), a local usage dashboard and MCP App. Run `node mods/sprout-codex/dist/cli.js serve` with Node.js 22+. The original Claude setup remains below; its bootstrap script is not needed for the Codex port.
+> **Codex fork:** This repository adds [Sprout for Codex](mods/sprout-codex/README.md), with historical token growth, official API price estimates, and an MCP App panel. Install with Node.js 22+: `node mods/sprout-codex/scripts/install-codex.mjs`. Codex manages the stdio plugin process; no persistent web server is required. The original Claude setup remains below; its bootstrap script is not needed for the Codex port.
 
 English | [中文](README.zh.md)
 

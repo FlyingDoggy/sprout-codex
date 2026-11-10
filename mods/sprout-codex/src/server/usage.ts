@@ -4,22 +4,24 @@ import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { dayAt, zeroTokens, type Tokens, type Usage, type UsageDay } from '../model'
 import { readJson, writeJson } from './storage'
+import { estimateCost, type Prices } from './pricing'
 
-export type Prices = Record<string, { input: number; cached: number; output: number }>
-type Event = { key: string; timestamp: number; model: string; tokens: Tokens }
+export type { Prices } from './pricing'
+type Event = { key: string; timestamp: number; model: string; tokens: Tokens; requestInput: number | null; serviceTier: string | null }
 type FileScan = {
-  size: number; mtime: number; offset: number; model: string; previous: Tokens;
+  size: number; mtime: number; offset: number; model: string; serviceTier: string | null; previous: Tokens;
   events: Event[]; quota: Usage['lastQuota'];
 }
-type Cache = { version: 1; files: Record<string, FileScan> }
-const KEYS = ['input', 'cached', 'output', 'reasoning', 'total'] as const
+type Cache = { version: 2; files: Record<string, FileScan> }
+const KEYS = ['input', 'cached', 'cacheWrite', 'output', 'reasoning', 'total'] as const
 const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
 
 export function tokenUsage(raw: any): Tokens | null {
   if (!raw || typeof raw !== 'object') return null
   const input = finite(raw.input_tokens)
   const output = finite(raw.output_tokens)
-  return { input, output, cached: Math.min(input, finite(raw.cached_input_tokens)), reasoning: Math.min(output, finite(raw.reasoning_output_tokens)), total: input + output }
+  const cached = Math.min(input, finite(raw.cached_input_tokens))
+  return { input, output, cached, cacheWrite: Math.min(input - cached, finite(raw.cache_write_input_tokens)), reasoning: Math.min(output, finite(raw.reasoning_output_tokens)), total: input + output }
 }
 
 export function consumeLine(scan: FileScan, line: string) {
@@ -27,7 +29,10 @@ export function consumeLine(scan: FileScan, line: string) {
   let record: any
   try { record = JSON.parse(line) } catch { return }
   const payload = record.payload
-  if (record.type === 'turn_context' && typeof payload?.model === 'string') scan.model = payload.model
+  if (record.type === 'turn_context') {
+    if (typeof payload?.model === 'string') scan.model = payload.model
+    scan.serviceTier = typeof payload?.service_tier === 'string' ? payload.service_tier : null
+  }
   if (record.type !== 'event_msg' || payload?.type !== 'token_count') return
   const timestamp = Date.parse(record.timestamp)
   if (!Number.isFinite(timestamp)) return
@@ -38,14 +43,18 @@ export function consumeLine(scan: FileScan, line: string) {
   for (const key of KEYS) tokens[key] = Math.max(0, total[key] - scan.previous[key])
   tokens.total = tokens.input + tokens.output
   tokens.cached = Math.min(tokens.input, tokens.cached)
+  tokens.cacheWrite = Math.min(tokens.input - tokens.cached, tokens.cacheWrite)
   tokens.reasoning = Math.min(tokens.output, tokens.reasoning)
   // Copied fork histories retain the timestamp and counters of the original event.
   const key = createHash('sha256').update(JSON.stringify([timestamp, total])).digest('hex')
-  scan.events.push({ key, timestamp, model: scan.model, tokens })
+  const last = tokenUsage(payload.info?.last_token_usage)
+  // A cumulative jump can cover several requests. Do not treat it as one long prompt.
+  const requestInput = last && last.input > 0 && last.input === tokens.input ? last.input : null
+  scan.events.push({ key, timestamp, model: scan.model, tokens, requestInput, serviceTier: scan.serviceTier })
   scan.previous = total
 }
 
-export const freshScan = (): FileScan => ({ size: 0, mtime: 0, offset: 0, model: 'unknown', previous: zeroTokens(), events: [], quota: null })
+export const freshScan = (): FileScan => ({ size: 0, mtime: 0, offset: 0, model: 'unknown', serviceTier: null, previous: zeroTokens(), events: [], quota: null })
 
 async function* walk(root: string): AsyncGenerator<string> {
   let entries
@@ -89,6 +98,8 @@ export function aggregate(scans: FileScan[], timezone: string, prices: Prices = 
   const days = new Map<string, UsageDay>()
   const seen = new Set<string>()
   const unpriced = new Set<string>()
+  const models = new Map<string, Usage['models'][number]>()
+  const costAssumptions = { standardTierEvents: 0, shortContextEvents: 0, defaultCacheWriteEvents: 0 }
   let lastQuota: Usage['lastQuota'] = null
   for (const file of scans) {
     if (file.quota && (!lastQuota || file.quota.at > lastQuota.at)) lastQuota = file.quota
@@ -96,16 +107,26 @@ export function aggregate(scans: FileScan[], timezone: string, prices: Prices = 
       if (seen.has(event.key)) continue
       seen.add(event.key)
       const day = dayAt(event.timestamp, timezone)
-      const row = days.get(day) ?? { day, ...zeroTokens(), costUsd: 0 }
+      const row = days.get(day) ?? { day, ...zeroTokens(), costUsd: 0, knownCostUsd: 0, pricedTokens: 0 }
       for (const key of KEYS) row[key] += event.tokens[key]
-      const price = prices[event.model]
-      if (!price || ![price.input, price.output, price.cached].every(n => Number.isFinite(n) && n >= 0)) {
+      const model = models.get(event.model) ?? { model: event.model, tokens: 0, costUsd: 0, knownCostUsd: 0 }
+      model.tokens += event.tokens.total
+      const cost = estimateCost(event.tokens, event.model, prices, event.requestInput, event.serviceTier)
+      if (cost === null) {
         unpriced.add(event.model)
         row.costUsd = null
-      } else if (row.costUsd !== null) {
-        const usage = event.tokens
-        row.costUsd += ((usage.input - usage.cached) * price.input + usage.cached * price.cached + usage.output * price.output) / 1e6
+        model.costUsd = null
+      } else {
+        row.knownCostUsd += cost
+        row.pricedTokens += event.tokens.total
+        model.knownCostUsd += cost
+        if (row.costUsd !== null) row.costUsd += cost
+        if (model.costUsd !== null) model.costUsd += cost
+        if (event.serviceTier === null) costAssumptions.standardTierEvents++
+        if (event.requestInput === null) costAssumptions.shortContextEvents++
+        if (event.tokens.cacheWrite > 0) costAssumptions.defaultCacheWriteEvents++
       }
+      models.set(event.model, model)
       days.set(day, row)
     }
   }
@@ -115,18 +136,18 @@ export function aggregate(scans: FileScan[], timezone: string, prices: Prices = 
     for (const key of KEYS) totals[key] += day[key]
     totals.costUsd = totals.costUsd === null || day.costUsd === null ? null : totals.costUsd + day.costUsd
   }
-  return { days: sorted, totals, firstDay: sorted[0]?.day ?? null, files: scans.length, unpricedModels: [...unpriced].sort(), warnings: [], lastQuota }
+  return { days: sorted, totals, firstDay: sorted[0]?.day ?? null, files: scans.length, unpricedModels: [...unpriced].sort(), models: [...models.values()].sort((a, b) => b.tokens - a.tokens), costAssumptions, warnings: [], lastQuota }
 }
 
 export async function scanUsage(codexHome: string, dataDir: string, timezone: string, prices: Prices = {}): Promise<Usage> {
   const cachePath = join(dataDir, 'usage-cache.json')
-  const old = await readJson<Cache>(cachePath, { version: 1, files: {} })
-  const next: Cache = { version: 1, files: {} }
+  const old = await readJson<Cache>(cachePath, { version: 2, files: {} })
+  const next: Cache = { version: 2, files: {} }
   const warnings: string[] = []
   for (const root of ['sessions', 'archived_sessions']) {
     try {
       for await (const file of walk(join(codexHome, root))) {
-        try { next.files[file] = await scanFile(file, old.version === 1 ? old.files[file] : undefined) }
+        try { next.files[file] = await scanFile(file, old.version === 2 ? old.files[file] : undefined) }
         catch { warnings.push('有会话记录暂时无法读取，统计可能不完整。') }
       }
     } catch { warnings.push('有会话目录无法读取，请检查本机文件权限。') }

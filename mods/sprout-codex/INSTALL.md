@@ -9,7 +9,7 @@
 把下面这段话复制给 Mac 上的 Codex：
 
 ```text
-帮我安装小苗 Codex 版：从 https://github.com/FlyingDoggy/sprout-codex.git 克隆 codex/sprout-personality 分支到 ~/Projects/sprout-codex。先检查 Node.js 22+、Git，以及支持 plugin 命令的 Codex CLI。已有仓库就检查来源和本地修改，再用 git pull --ff-only 更新。
+帮我安装小苗 Codex 版：从 https://github.com/FlyingDoggy/sprout-codex.git 克隆 codex/sprout-personality 分支到 ~/Projects/sprout-codex。先检查 Node.js 22.16+（22.x）或 24+、Git，以及支持 plugin 命令的 Codex CLI。已有仓库就检查来源和本地修改，再用 git pull --ff-only 更新。
 
 在仓库根目录运行 node mods/sprout-codex/scripts/install-codex.mjs，检查 sprout-codex@muyu-sprout 已安装并启用。只使用这个安装器。完成后提醒我完全退出并重新打开 Codex，再说“打开小苗”。
 ```
@@ -27,7 +27,7 @@ codex --version
 codex plugin --help
 ```
 
-- Node.js 需要 **22 或更新版本**。未安装时，使用 [Node.js 官方安装包](https://nodejs.org/en/download)。
+- Node.js 需要 **22.16+（22.x）或 24+**。未安装时，使用 [Node.js 官方安装包](https://nodejs.org/en/download)。
 - Git 未安装时，按 macOS 的命令行工具安装提示完成安装。
 - `codex` 或 `plugin` 命令不存在时，按 [Codex 官方 CLI 安装说明](https://developers.openai.com/codex/cli/)安装或更新。桌面客户端和 CLI 都需要准备好。
 

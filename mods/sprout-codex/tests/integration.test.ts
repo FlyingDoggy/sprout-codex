@@ -29,7 +29,7 @@ test('MCP stdio handshake, dashboard data, UI resource and pet action work end t
     assert.deepEqual(tools.tools.find(tool => tool.name === 'sprout_status')?._meta?.['openai/ui'], { entrypoints: [{ type: 'thread' }, { type: 'global' }] })
     const status = await client.callTool({ name: 'sprout_status', arguments: {} })
     assert.equal((status.structuredContent as any).demo, true)
-    const resource = await client.readResource({ uri: 'ui://sprout/dashboard-personality-v2.html' })
+    const resource = await client.readResource({ uri: 'ui://sprout/dashboard-personality-v3.html' })
     assert.ok('text' in resource.contents[0])
     assert.match(resource.contents[0].text, /小苗/)
     assert.equal(resource.contents[0].mimeType, 'text/html;profile=mcp-app')
@@ -77,7 +77,14 @@ test('stdio plugin calculates historical costs and retains pet state across proc
       const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('dist/cli.js'), 'mcp'], env: { SPROUT_CODEX_HOME: root, SPROUT_DATA_DIR: join(root, 'state'), SPROUT_GITHUB: '0', SPROUT_LIVE_QUOTA: '0', SPROUT_PRICE_REFRESH: '0' }, stderr: 'pipe' })
       try {
         await client.connect(transport)
-        const { structuredContent: d } = await client.callTool({ name: 'sprout_status', arguments: {}, _meta:{'x-codex-turn-metadata':JSON.stringify({thread_id:'alpha'})} })
+        const request = { name: 'sprout_status', arguments: {}, _meta:{'x-codex-turn-metadata':JSON.stringify({thread_id:'alpha'})} }
+        let result = await client.callTool(request)
+        const deadline = Date.now() + 3000
+        while ((result.structuredContent as any).usage.loading && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 10))
+          result = await client.callTool(request)
+        }
+        const d = result.structuredContent
         assert.equal((d as any).usage.totals.total, 1_100_000)
         assert.equal((d as any).usage.totals.costUsd, 2.05)
         assert.equal((d as any).pet.fed, run)
@@ -112,7 +119,11 @@ test('one running MCP process hot-switches personalities repeatedly without touc
     const transport = new StdioClientTransport({ command:process.execPath,args:[resolve('dist/cli.js'),'mcp'],env:{SPROUT_CODEX_HOME:root,SPROUT_DATA_DIR:dataDir,SPROUT_GITHUB:'0',SPROUT_LIVE_QUOTA:'0',SPROUT_PRICE_REFRESH:'0'},stderr:'pipe' })
     await client.connect(transport)
     const status = async () => (await client.callTool({ name:'sprout_status',arguments:{threadId:'chat'} })).structuredContent as Dashboard
-    await status()
+    const deadline = Date.now() + 3000
+    while ((await status()).usage.loading) {
+      assert.ok(Date.now() < deadline, 'initial history import must finish before switching personas')
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
     await client.callTool({ name:'sprout_interact',arguments:{action:'feed',threadId:'chat'} })
     const baseline = await status()
     const state = await readFile(join(dataDir,'pet.json'),'utf8')

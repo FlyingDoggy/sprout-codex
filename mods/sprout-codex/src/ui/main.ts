@@ -1,3 +1,4 @@
+import manifest from '../../package.json'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { PET_ACTIONS, type Dashboard, type Pet, type QuotaWindow, type PanelContext } from '../model'
 import { openGrowth, refreshGrowth } from './growth'
@@ -173,7 +174,7 @@ function render() {
       ${errorText ? `<p class="error" role="status">${esc(errorText)}</p>` : ''}
     </div>
     ${section('额度', observed && Date.now() - observed > 15 * 60_000 ? `<span class="note">更新于 ${agoText(observed, Date.now())}</span>` : '', quota || '<p class="note">暂无额度读数</p>')}
-    ${first ? section(rangeLabel, `<div class="range" aria-label="统计范围"><button id="range30" aria-pressed="${range === '30'}">30 天</button><button id="rangeAll" aria-pressed="${range === 'all'}">全部</button></div>`, chart(tilesSvg({ ...tilesInput, isIntro:intro.has('tiles') }), `${rangeLabel}：${formatTokens(tokens)} token，${costText}；连续使用 ${pet.streak} 天；缓存命中 ${input ? (cached / input * 100).toFixed(1) : '0.0'}%`)) : '<p class="note">暂无使用记录</p>'}
+    ${first ? section(rangeLabel, `<div class="range" aria-label="统计范围"><button id="range30" aria-pressed="${range === '30'}">30 天</button><button id="rangeAll" aria-pressed="${range === 'all'}">全部</button></div>`, chart(tilesSvg({ ...tilesInput, isIntro:intro.has('tiles') }), `${rangeLabel}：${formatTokens(tokens)} token，${costText}；连续使用 ${pet.streak} 天；缓存命中 ${input ? (cached / input * 100).toFixed(1) : '0.0'}%`)) : `<p class="note">${d.usage.loading ? '正在读取历史用量…' : '暂无使用记录'}</p>`}
     ${first && chartDays.length >= 2 ? section('每日 token', '', chart(trendSvg(width, chartDays, intro.has('trend')), '每日 token')) : ''}
     ${mergeTotal ? section('每日合并', `<span class="note">${mergeDays.length} 天 ${mergeTotal} 个 PR${gh?.mergesComplete ? '' : '（部分）'}</span>`, chart(mergesSvg(width, mergeDays, intro.has('merges')), '每日合并 PR 和增删行数')) : ''}
     ${first ? section('Codex 使用', `<span class="note">${dayNumber(d.today) - dayNumber(first) + 1} 天里用了 ${d.usage.days.filter(day => day.total > 0 && day.day <= d.today).length} 天</span>`, chart(usageHeatmapSvg(width, allDays, first, d.today, intro.has('clay')), 'Codex 使用热力图')) : ''}
@@ -242,7 +243,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
 
 async function start() {
   if (embedded) {
-    app = new App({ name: 'Sprout Codex', version: '0.5.2' }, {})
+    app = new App({ name: 'Sprout Codex', version: manifest.version }, {})
     app.ontoolresult = result => { const data = result.structuredContent as Dashboard | undefined; if (data?.version === 1) { dashboard = data; panelContext=data.context??panelContext; render() } }
     app.onhostcontextchanged = context => { if (context.theme) { theme = context.theme; document.documentElement.dataset.theme = theme; render() } }
     await app.connect()

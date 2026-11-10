@@ -2,9 +2,9 @@
 
 | 分支 | 版本 | 内容 |
 |---|---|---|
-| [`codex/sprout-port`](https://github.com/FlyingDoggy/sprout-codex/tree/codex/sprout-port) | 0.4.1 | 移植基线：原版布局、图表、成长、Codex 数据适配和交互修复；固定静态词库 |
-| [`codex/sprout-personality`](https://github.com/FlyingDoggy/sprout-codex/tree/codex/sprout-personality) | 0.5.2 | 在基线上增加人设优化、独立人设包、任务场景、偏好文件和热切换菜单；不包含模型生成器 |
-| [`codex/sprout-llm`](https://github.com/FlyingDoggy/sprout-codex/tree/codex/sprout-llm) | 0.6.1 | 在人设版上增加模型提供方、系统提示词、后台补句与缓存；默认关闭 |
+| [`codex/sprout-port`](https://github.com/FlyingDoggy/sprout-codex/tree/codex/sprout-port) | 0.4.2 | 移植基线：原版布局、图表、成长、Codex 数据适配和交互修复；固定静态词库 |
+| [`codex/sprout-personality`](https://github.com/FlyingDoggy/sprout-codex/tree/codex/sprout-personality) | 0.5.3 | 在基线上增加人设优化、独立人设包、任务场景、偏好文件和热切换菜单；不包含模型生成器 |
+| [`codex/sprout-llm`](https://github.com/FlyingDoggy/sprout-codex/tree/codex/sprout-llm) | 0.6.2 | 在人设版上增加模型提供方、系统提示词、后台补句与缓存；默认关闭 |
 
 三个分支按上表顺序继承。基础修复先进入 `codex/sprout-port`，再合入人设版，最后合入 LLM 版；上层功能不反向合入基础分支。`main` 保留上游原仓库。
 

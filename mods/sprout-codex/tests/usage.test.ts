@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, appendFile, rename, rm, readFile } from 'node:fs/promises'
@@ -16,7 +17,7 @@ test('repeated cumulative snapshots, stale events, and copied histories count on
   consumeLine(scan, context)
   consumeLine(scan, event('2026-11-09T23:50:00Z', 100, 20, 50, 5))
   consumeLine(scan, event('2026-11-09T23:51:00Z', 100, 20, 50, 5))
-  consumeLine(scan, event('2026-11-09T23:52:00Z', 90, 10, 40, 2))
+  consumeLine(scan, event('2026-11-09T23:49:00Z', 90, 10, 40, 2))
   consumeLine(scan, event('2026-11-10T16:01:00Z', 150, 30, 70, 9))
   const result = aggregate([scan, structuredClone(scan)], 'Asia/Shanghai', { 'test-model': { input: 2, cached: 1, output: 4 } })
   assert.equal(result.totals.total, 180)
@@ -48,7 +49,8 @@ test('partial pricing retains known costs and reports token coverage without hid
 })
 test('request context is taken from the last usage, never the growing session total', () => {
   const scan = freshScan()
-  consumeLine(scan, JSON.stringify({ type: 'turn_context', payload: { model: 'test-model', service_tier: 'priority' } }))
+  consumeLine(scan, JSON.stringify({ type: 'event_msg', payload: { type: 'thread_settings_applied', thread_settings: { model: 'test-model', service_tier: 'priority' } } }))
+  consumeLine(scan, context)
   for (let i = 1; i <= 3; i++) {
     const row = JSON.parse(event(`2026-11-10T00:0${i}:00Z`, i * 200_000, i * 100))
     row.payload.info.last_token_usage = { input_tokens: 200_000, output_tokens: 100 }
@@ -83,7 +85,7 @@ test('incremental scans handle incomplete tails, archive moves, truncation and d
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test('version 5 caches are reclassified from desktop history without changing token totals', async () => {
+test('port caches are reclassified for task context without changing token totals', async () => {
   const root=await mkdtemp(join(tmpdir(),'sprout-desktop-history-'))
   try {
     await mkdir(join(root,'sessions'))
@@ -95,15 +97,20 @@ test('version 5 caches are reclassified from desktop history without changing to
     ]
     await writeFile(path,rows.map(row=>JSON.stringify(row)).join('\n')+'\n')
     const before=await scanUsage(root,data,'UTC')
-    const cached=JSON.parse(await readFile(join(data,'usage-cache.json'),'utf8'))
-    cached.version=5
-    delete cached.files[path].activity.task
-    await writeFile(join(data,'usage-cache.json'),JSON.stringify(cached))
+    const db=new DatabaseSync(join(data,'usage-v1.sqlite'))
+    const state=JSON.parse((db.prepare('SELECT state FROM files WHERE path=?').get(path) as any).state)
+    state.version=1
+    delete state.activity.task
+    db.prepare('UPDATE files SET state=? WHERE path=?').run(JSON.stringify(state),path)
+    db.close()
     const after=await scanUsage(root,data,'UTC')
     assert.deepEqual(after.totals,before.totals)
     assert.equal(after.activityStates[0].task?.scenario,'slides')
     assert.deepEqual(after.activityStates[0].task?.signals,['layout'])
-    assert.doesNotMatch(await readFile(join(data,'usage-cache.json'),'utf8'),/PRIVATE CLIENT|母版/)
-    assert.equal(JSON.parse(await readFile(join(data,'usage-cache.json'),'utf8')).version,6)
+    const next=new DatabaseSync(join(data,'usage-v1.sqlite'),{readOnly:true})
+    const stored=(next.prepare('SELECT state FROM files WHERE path=?').get(path) as any).state
+    assert.doesNotMatch(stored,/PRIVATE CLIENT|母版/)
+    assert.equal(JSON.parse(stored).version,2)
+    next.close()
   } finally { await rm(root,{recursive:true,force:true}) }
 })

@@ -4,6 +4,9 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
 
+const [major, minor] = process.versions.node.split('.').map(Number)
+if (!(major >= 24 || major === 22 && minor >= 16)) throw new Error('小苗需要 Node.js 22.16+（22.x）或 24+，用于 SQLite 与 Zstandard 日志读取。')
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const codexHome = process.env.CODEX_HOME ?? join(homedir(), '.codex')
 const source = join(codexHome, 'plugins/sources/muyu-sprout')

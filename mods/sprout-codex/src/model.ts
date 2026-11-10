@@ -9,7 +9,12 @@ export type QuotaWindow = {
   forecast?: { fullAt: number | null; basis: 'recent' | 'average' };
 }
 export type Quota = { source: 'live' | 'session' | 'unavailable'; windows: QuotaWindow[]; message: string | null }
+export function quotaWindowIsLive(window: QuotaWindow, now = Date.now()) {
+  return Number.isFinite(window.observedAt) && window.observedAt <= now &&
+    (window.resetsAt ?? window.observedAt + window.windowMinutes * 60_000) > now
+}
 export type Usage = {
+  loading?: boolean;
   days: UsageDay[]; totals: Tokens & { costUsd: number | null }; files: number;
   firstDay: string | null; unpricedModels: string[]; warnings: string[];
   models: { model: string; tokens: number; costUsd: number | null; knownCostUsd: number }[];

@@ -1,4 +1,4 @@
-import type { Dashboard, Pet, PetAction, SceneEffect } from '../model'
+import { quotaWindowIsLive, type Dashboard, type Pet, type PetAction, type SceneEffect } from '../model'
 import type { SproutBucket } from '../types'
 import { bucketsFor, formatTokens, formatUsd, hashOf, lostStreakOf, moodOf, streakOf } from './logic'
 import { levelLabel } from './levels'
@@ -17,7 +17,7 @@ export function companion(d: Dashboard, now = Date.now()) {
   const active = d.usage.days.filter(day => day.total > 0).map(day => day.day)
   const streak = streakOf(active, d.today)
   const lost = lostStreakOf(active, d.today)
-  const windows = d.quota.windows.filter(w => w.resetsAt === null || w.resetsAt > now)
+  const windows = d.quota.windows.filter(w => quotaWindowIsLive(w, now))
   const five = windows.find(w => w.windowMinutes === 300)
   const week = windows.find(w => w.windowMinutes === 10080)
   const isLevelUp = (d.pet.levelUpUntil ?? 0) > now

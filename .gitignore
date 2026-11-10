@@ -50,9 +50,6 @@ __pycache__/
 mods/**/.claude-plugin/types/
 
 # Codex port sources, without local dependencies, builds, or usage data.
-!.agents/
-!.agents/plugins/
-!.agents/plugins/marketplace.json
 !.github/
 !.github/workflows/
 !.github/workflows/sprout-codex.yml

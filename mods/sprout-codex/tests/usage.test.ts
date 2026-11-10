@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, writeFile, appendFile, rename, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, appendFile, rename, rm, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { aggregate, consumeLine, freshScan, scanUsage, tokenUsage } from '../src/server/usage'
@@ -81,4 +81,29 @@ test('incremental scans handle incomplete tails, archive moves, truncation and d
     await rm(join(archived, 'test.jsonl'))
     assert.equal((await scanUsage(root, data, 'UTC')).totals.total, 0)
   } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test('version 5 caches are reclassified from desktop history without changing token totals', async () => {
+  const root=await mkdtemp(join(tmpdir(),'sprout-desktop-history-'))
+  try {
+    await mkdir(join(root,'sessions'))
+    const data=join(root,'state'), path=join(root,'sessions','desktop.jsonl')
+    const rows=[
+      {type:'session_meta',payload:{id:'desktop-chat',cwd:'/private/project'}},
+      {type:'response_item',timestamp:'2026-11-10T00:00:00Z',payload:{type:'message',role:'user',content:[{type:'input_text',text:'PRIVATE CLIENT，只修改这一页的 PPT，保留母版。'}]}},
+      JSON.parse(event('2026-11-10T00:01:00Z',100,10)),
+    ]
+    await writeFile(path,rows.map(row=>JSON.stringify(row)).join('\n')+'\n')
+    const before=await scanUsage(root,data,'UTC')
+    const cached=JSON.parse(await readFile(join(data,'usage-cache.json'),'utf8'))
+    cached.version=5
+    delete cached.files[path].activity.task
+    await writeFile(join(data,'usage-cache.json'),JSON.stringify(cached))
+    const after=await scanUsage(root,data,'UTC')
+    assert.deepEqual(after.totals,before.totals)
+    assert.equal(after.activityStates[0].task?.scenario,'slides')
+    assert.deepEqual(after.activityStates[0].task?.signals,['layout'])
+    assert.doesNotMatch(await readFile(join(data,'usage-cache.json'),'utf8'),/PRIVATE CLIENT|母版/)
+    assert.equal(JSON.parse(await readFile(join(data,'usage-cache.json'),'utf8')).version,6)
+  } finally { await rm(root,{recursive:true,force:true}) }
 })

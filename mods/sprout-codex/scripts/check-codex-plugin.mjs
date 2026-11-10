@@ -52,7 +52,7 @@ function connect() {
   }
 }
 async function init(client) {
-  await client.call('initialize', { clientInfo: { name: 'sprout_smoke', version: '0.5.1' }, capabilities: null })
+  await client.call('initialize', { clientInfo: { name: 'sprout_smoke', version: '0.5.2' }, capabilities: null })
   client.notify('initialized')
 }
 let client
@@ -61,7 +61,7 @@ try {
   await client.call('plugin/install', { marketplacePath, pluginName: 'sprout-codex' })
   await client.close()
   client = connect(); await init(client)
-  const result = await client.call('mcpServer/resource/read', { server: 'sprout', uri: 'ui://sprout/dashboard-personality-v1.html' })
+  const result = await client.call('mcpServer/resource/read', { server: 'sprout', uri: 'ui://sprout/dashboard-personality-v2.html' })
   assert.ok(JSON.stringify(result).includes('小苗'))
   console.log('Codex installed the isolated plugin and read its MCP App resource successfully.')
 } finally {

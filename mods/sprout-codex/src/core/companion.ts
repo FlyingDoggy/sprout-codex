@@ -3,9 +3,12 @@ import type { SproutBucket } from '../types'
 import { bucketsFor, formatTokens, formatUsd, hashOf, lostStreakOf, moodOf, streakOf } from './logic'
 import { levelLabel } from './levels'
 import { linesFor, type LineContext } from './lines'
+import { interleave } from './personality'
 
 const LINE_FRESH_MS = 5 * 60_000
 const AUTO_LINE_MS = 10 * 60_000
+// Original developer jokes remain available in coding and actual test/merge events.
+const CODING_LINE = /代码|测试|重构|合并|提交|上线|\b(?:bugs?|commit|git|squash|debug|node_modules|rebase|CI|TODOs?|force[- ]?push|coding|code|tests?|refactor|main)\b/i
 
 /** Upstream readModel's companion logic, independent of either host's UI runtime. */
 export function companion(d: Dashboard, now = Date.now()) {
@@ -72,11 +75,31 @@ export function companion(d: Dashboard, now = Date.now()) {
   // Short event pools share the persona's everyday banter after their specific lines.
   if (isLive && line.roast && ['busy', 'planning', 'compact', 'agents', 'test_failed', 'test_passed', 'done', 'interrupted', 'approval', 'return'].includes(key)) buckets.push('happy')
   if (buckets.includes('happy') && streak >= 7) buckets.push('streak')
-  const pool = [...new Set(buckets.flatMap(bucket => {
+  const original = (bucket: SproutBucket) => linesFor([bucket], context).map(line => line.text).filter(text =>
+    !d.dialogue?.inheritOriginal || d.task?.scenario === 'coding' || ['test_failed', 'test_passed', 'party'].includes(bucket) || !CODING_LINE.test(text))
+  const resolve = (bucket: SproutBucket) => {
     const custom = d.dialogue?.pools[bucket]
-    return custom?.length ? custom : linesFor([bucket], context).map(line => line.text)
-  }))]
+    return custom?.length ? d.dialogue?.inheritOriginal ? interleave([custom, original(bucket)]) : custom : original(bucket)
+  }
+  const pool = [...new Set(buckets.flatMap(resolve))]
   const index = isLive ? line.index : key === 'test_failed' ? Math.min(2, Math.max(0, (work?.failures ?? 1) - 1)) : Math.floor(now / AUTO_LINE_MS) + Number.parseInt(hashOf(d.today), 36)
+  let text = pool[index % pool.length] ?? '……'
+  if (isLive && line.roast && (d.dialogue?.inheritOriginal || d.dialogue?.taskLines?.length)) {
+    const taskLines = [...new Set(d.dialogue.taskLines ?? [])]
+    const taskSet = new Set(taskLines)
+    // Quota/night affects the pet's expression, not whether it can talk about this task.
+    const aside = interleave([
+      ...(d.dialogue.inheritOriginal ? [original('happy')] : []),
+      (d.dialogue.pools.happy ?? original('happy')).filter(line => !taskSet.has(line)),
+      key === 'happy' ? [] : resolve(key).filter(line => !taskSet.has(line)),
+      streak >= 7 ? resolve('streak') : [],
+    ]).filter(line => !taskSet.has(line))
+    // Two task lines, then one aside; neither stream gets buried at the end of a huge pool.
+    if (taskLines.length && (!aside.length || index % 3 !== 2)) {
+      const position = aside.length ? index - Math.floor((index + 1) / 3) : index
+      text = taskLines[position % taskLines.length]
+    } else if (aside.length) text = aside[(taskLines.length ? Math.floor(index / 3) : index) % aside.length]
+  }
   if (now - (d.pet.prayerAt ?? 0) < 4000) { effect = 'pray'; mood = 'party' }
   if (action && (d.pet.burst?.count ?? 0) >= 3) effect = action === 'feed' ? 'umbrella' : 'hide'
   else if (action && d.pet.burst?.count === 2) effect = action === 'feed' ? 'burp' : 'guard'
@@ -84,7 +107,7 @@ export function companion(d: Dashboard, now = Date.now()) {
   if (action === 'pat' && mood !== 'sleep') mood = 'party'
   return {
     mood, moodKey, action, hour, streak, key, index, effect, showCat, canPray, agents: activity?.agents ?? 0,
-    text: pool[index % pool.length] ?? '……',
+    text,
     isConfetti: (isLevelUp || party !== null) && mood === 'party',
     isPop: now - Math.max(d.pet.actionAt, line?.at ?? 0) < 1000,
   }
@@ -97,9 +120,11 @@ export function interactPet(pet: Pet, action: PetAction, dashboard?: Dashboard, 
   const bucket: SproutBucket = action === 'roast' ? model?.moodKey ?? 'happy'
     : action === 'feed' && count >= 3 ? 'overwater' : action === 'pat' && count >= 3 ? 'overpat' : action
   const roast = action === 'roast'
-  const cursorKey = `${dashboard?.dialogue?.personaId ?? 'classic'}/${roast ? 'roast' : 'care'}/${bucket}`
+  const contextualRoast = roast && !!(dashboard?.dialogue?.inheritOriginal || dashboard?.dialogue?.taskLines?.length)
+  const taskKey = `${dashboard?.task?.scenario ?? 'general'}:${[...dashboard?.task?.signals ?? []].sort().join(',')}`
+  const cursorKey = `${dashboard?.dialogue?.personaId ?? 'classic'}/${roast ? 'roast' : 'care'}/${contextualRoast ? `work-v2/${taskKey}` : bucket}`
   // Each action/persona resumes its own rotation even when buttons are interleaved.
-  const previous = pet.lineCursors?.[cursorKey] ?? (model?.key === bucket ? model.index : pet.line?.bucket === bucket ? pet.line.index : Math.floor(now / 1000) % 97)
+  const previous = pet.lineCursors?.[cursorKey] ?? (contextualRoast ? -1 : model?.key === bucket ? model.index : pet.line?.bucket === bucket ? pet.line.index : Math.floor(now / 1000) % 97)
   const index = previous + 1
   const lineCursors = Object.fromEntries([...Object.entries(pet.lineCursors ?? {}).filter(([key]) => key !== cursorKey), [cursorKey, index]].slice(-128))
   return {

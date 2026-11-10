@@ -13,7 +13,7 @@ type FileScan = {
   size: number; mtime: number; offset: number; model: string; serviceTier: string | null; previous: Tokens;
   events: Event[]; quota: Usage['lastQuota']; activity: ActivityState;
 }
-type Cache = { version: 5; files: Record<string, FileScan> }
+type Cache = { version: 6; files: Record<string, FileScan> }
 const KEYS = ['input', 'cached', 'cacheWrite', 'output', 'reasoning', 'total'] as const
 const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
 
@@ -26,7 +26,7 @@ export function tokenUsage(raw: any): Tokens | null {
 }
 
 export function consumeLine(scan: FileScan, line: string) {
-  if (!/token_count|turn_context|session_meta|task_started|task_complete|turn_aborted|item_completed|compacted|user_message/.test(line)) return
+  if (!/token_count|turn_context|session_meta|task_started|task_complete|turn_aborted|item_completed|compacted|user_message|"role"\s*:\s*"user"/.test(line)) return
   let record: any
   try { record = JSON.parse(line) } catch { return }
   consumeActivity(scan.activity, record)
@@ -143,13 +143,13 @@ export function aggregate(scans: FileScan[], timezone: string, prices: Prices = 
 
 export async function scanUsage(codexHome: string, dataDir: string, timezone: string, prices: Prices = {}) {
   const cachePath = join(dataDir, 'usage-cache.json')
-  const old = await readJson<Cache>(cachePath, { version: 5, files: {} })
-  const next: Cache = { version: 5, files: {} }
+  const old = await readJson<Cache>(cachePath, { version: 6, files: {} })
+  const next: Cache = { version: 6, files: {} }
   const warnings: string[] = []
   for (const root of ['sessions', 'archived_sessions']) {
     try {
       for await (const file of walk(join(codexHome, root))) {
-        try { next.files[file] = await scanFile(file, old.version === 5 ? old.files[file] : undefined) }
+        try { next.files[file] = await scanFile(file, old.version === 6 ? old.files[file] : undefined) }
         catch { warnings.push('有会话记录暂时无法读取，统计可能不完整。') }
       }
     } catch { warnings.push('有会话目录无法读取，请检查本机文件权限。') }

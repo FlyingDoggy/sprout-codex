@@ -1,6 +1,6 @@
 import type { Activity, WorkEvent } from '../model'
 import type { TaskContext } from '../core/personality'
-import { classifyTask } from './task-context'
+import { classifyTask, userRequest } from './task-context'
 
 /** Only lifecycle metadata and task labels survive parsing, never prompts or tool output. */
 export type ActivityState = {
@@ -30,11 +30,13 @@ export function consumeActivity(state: ActivityState, record: any) {
     if (typeof p.cwd === 'string') state.cwd = p.cwd
     return
   }
-  if (!Number.isFinite(at) || at < state.updatedAt) return
-  if (record.type === 'event_msg' && p.type === 'user_message' && typeof p.message === 'string') {
-    state.task = classifyTask(p.message, at, state.task)
+  if (!Number.isFinite(at)) return
+  const request = userRequest(record)
+  if (request && at >= (state.task?.at ?? 0)) {
+    state.task = classifyTask(request, at, state.task)
     return
   }
+  if (at < state.updatedAt) return
   if (record.type === 'turn_context') { if (typeof p.cwd === 'string') state.cwd = p.cwd; return }
   const event = (kind: WorkEvent) => { state.event = { kind, at, failures: state.failures } }
   if (record.type === 'compacted') { event('compact'); state.updatedAt = at; return }

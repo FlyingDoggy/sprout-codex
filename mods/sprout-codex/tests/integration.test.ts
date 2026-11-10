@@ -29,7 +29,7 @@ test('MCP stdio handshake, dashboard data, UI resource and pet action work end t
     assert.deepEqual(tools.tools.find(tool => tool.name === 'sprout_status')?._meta?.['openai/ui'], { entrypoints: [{ type: 'thread' }, { type: 'global' }] })
     const status = await client.callTool({ name: 'sprout_status', arguments: {} })
     assert.equal((status.structuredContent as any).demo, true)
-    const resource = await client.readResource({ uri: 'ui://sprout/dashboard-personality-v1.html' })
+    const resource = await client.readResource({ uri: 'ui://sprout/dashboard-personality-v2.html' })
     assert.ok('text' in resource.contents[0])
     assert.match(resource.contents[0].text, /小苗/)
     assert.equal(resource.contents[0].mimeType, 'text/html;profile=mcp-app')
@@ -99,7 +99,7 @@ test('one running MCP process hot-switches personalities repeatedly without touc
   const dataDir = join(root, 'state')
   const client = new Client({ name:'sprout-hot-switch', version:'1' })
   const packPath = join(dataDir,'personas','switch-test.json')
-  const pack = { schemaVersion:1,id:'switch-test',version:'1',extends:'delivery',name:'测试人设',pools:{feed:['一号人设，水收到了。','一号人设，先坐会儿。']} }
+  const pack = { schemaVersion:1,id:'switch-test',version:'1',extends:'delivery',inheritOriginal:false,name:'测试人设',pools:{feed:['一号人设，水收到了。','一号人设，先坐会儿。']} }
   try {
     await mkdir(join(root,'sessions'))
     await writeFile(join(root,'sessions','history.jsonl'), [

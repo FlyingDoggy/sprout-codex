@@ -27,7 +27,7 @@ node dist/cli.js personality use classic
 }
 ```
 
-然后运行 `node dist/cli.js personality use my-sprout`。可覆盖 `identity`、`voice`、`pools`、`scenes`、`signals`。格式定义和内置内容见 `src/core/personality.ts`、`src/server/personality-config.ts`。每个覆盖池至少两句，每句必须放得下原版三行气泡。
+然后运行 `node dist/cli.js personality use my-sprout`。可覆盖 `identity`、`voice`、`pools`、`scenes`、`signals`。`delivery` 默认设置 `inheritOriginal: true`，原版台词与扩展台词交错轮换；非开发任务会过滤催写代码、提交等开发专属句子。自定义包可设 `inheritOriginal: false`，让自定义池完全替换对应原版池。未定义的池仍继承原版。格式定义和内置内容见 `src/core/personality.ts`、`src/server/personality-config.ts`。每个覆盖池至少两句，每句必须放得下原版三行气泡。
 
 有效修改在下一次面板刷新时读取，无需重装。错误文件回退到原静态台词，不影响统计。切换人设不会开启模型生成。
 
@@ -37,11 +37,13 @@ node dist/cli.js personality use classic
 
 已在同一个持续运行的 MCP 进程中验证 30 次来回切换、编辑当前包、错误文件回退和修复恢复；宠物存档、历史用量及额度不因切换改变。
 
-喂水、摸摸、再嘴一句分别保存轮换位置，交替点击不会重新从同一句开始。连续三次喂水／摸摸保留撑伞／躲避反应，各有十二句嫌烦台词；点击“再嘴一句”立即离开互动台词，回到当前工作场景。工作事件短台词池会接入日常吐槽。任务和细分信号的台词与当前人设合并，不再把整个词库缩成两三句。
+喂水、摸摸、再嘴一句分别保存轮换位置，交替点击不会重新从同一句开始。连续三次喂水／摸摸保留撑伞／躲避反应，各有十二句嫌烦台词。点击“再嘴一句”立即离开互动台词；有任务台词时，每三句中两句谈当前任务，一句穿插原版、人设日常或当前状态。额度紧张、停水、深夜仍可吐槽当前任务，宠物表情继续反映实际额度。任务、细分信号、人设各自保存轮换位置，切回来继续上次位置。原版人设保持原来的选句方式。
 
 ## 任务与个人偏好
 
-本机日志的用户消息只在内存中分类，保存 `consulting / slides / commercial / research / teaching / coding / media / personal / general` 标签，以及范围变化、布局、措辞、证据、审阅等信号。聊天切换按当前 thread ID 隔离；不把某个文件夹永久认定为开发项目。该分类使用保守关键词，简短的“继续”沿用上一场景，不能理解每一句话的含义。
+支持桌面版 `response_item` 用户消息和 CLI `event_msg.user_message`。附带的 AGENTS、环境信息、图片标记和文件列表不参与分类；只提取实际请求。消息只在内存中分类，保存 `consulting / slides / commercial / research / teaching / coding / media / personal / general` 标签，以及范围、布局、措辞、证据、审阅、架构边界、知识建模、文件交付、反复确认、宠物台词等信号。聊天切换按当前 thread ID 隔离；不把某个文件夹永久认定为开发项目。简短的“可以，继续”沿用上一场景及信号；明确新任务会换场景。分类使用关键词，不能理解每一句话的含义。
+
+0.5.2 首次读取会重建旧版用量缓存，补齐此前漏读的桌面任务标签；不额外计算 Token，也不重置成长或互动计数。
 
 只保存标签，不保存用户消息、客户材料、命令或输出。没有聊天上下文的全局面板不猜当前工作类型。历史 Token 本来就包括非代码任务，成长计数不需要为这些场景加权或补记。
 

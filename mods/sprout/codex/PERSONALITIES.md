@@ -27,3 +27,20 @@ node --import ./codex/loader.mjs codex/personality-cli.ts remember /absolute/pat
 Task classification reads only the current named chat's recent user requests. It keeps closed-set labels, not prompt text. No named chat means no inferred task from another chat. Attachments and injected environment instructions are excluded. A generic “continue” retains the previous labels. The phrase “可编辑的 PPT，别他妈交一叠截图。” is in the `artifact` signal pool, which requires a slides task plus editable/native/export delivery wording.
 
 Local packs, preferences, scan caches and account data are not part of the release. The optional generation edition is maintained separately and defaults to off.
+
+## Optional generation (this branch)
+
+`codex/sprout-llm` adds `GeneratedDialogueEngine` and the Codex CLI provider. It uses the existing ChatGPT login, with no API key. The child CLI runs in a temporary directory with an explicit system prompt and JSON schema, without inherited project instructions, plugins, apps, memories, browser or shell tools. `dialogue-provider.ts` contains the system prompt.
+
+Generation defaults to off. Off means cached generated lines are ignored too. This branch must not be installed as a side effect of updating the static edition. To opt in on an installation of this edition:
+
+```sh
+node --import ./codex/loader.mjs codex/personality-cli.ts generation on
+node --import ./codex/loader.mjs codex/personality-cli.ts generation off
+```
+
+The default is a batch of six short lines, at most once per 15 minutes and 12 batches per day across local plugin processes. Settings live in `personality.json` under `generation`; the selected model remains `gpt-6-luna`. The model must be available to the signed-in plan. A missing model, login problem or timeout keeps static dialogue working.
+
+Drawing never waits for generation. A full quota prevents starting a new call. Cache keys include personality revision, preference revision, model, chat, task labels and event. Turning off generation or changing personality/settings discards an in-flight result. Only scoped preference text and closed-set task labels reach the prompt; preference source paths and raw conversation text do not.
+
+Tests use injected providers and a local fake CLI executable. They do not call a model or consume plan quota.

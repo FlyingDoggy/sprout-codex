@@ -47,13 +47,13 @@ export class DialogueEngine {
 
   chooseLine(choice: LineChoice) {
     const pack = this.loaded?.pack ?? CLASSIC_PERSONA
-    if (pack.id === 'classic' || lang() !== 'zh') return choice.text
+    if ((pack.id === 'classic' && !Object.values(this.generated).some(lines => lines?.length)) || lang() !== 'zh') return choice.text
     const pools = personaPools(pack, this.task)
     const original = (key: string) => choice.original(key as LineChoice['key']).filter(text =>
       !pack.inheritOriginal || this.task?.scenario === 'coding' || ['test_failed', 'test_passed', 'party'].includes(key) || !CODING.test(text))
     const resolve = (key: string) => {
       const custom = interleave([this.generated[key as keyof LinePools] ?? [], pools[key as keyof LinePools] ?? []])
-      return custom.length ? (pack.inheritOriginal ? interleave([custom, original(key)]) : custom) : original(key)
+      return custom.length ? (pack.inheritOriginal || pack.id === 'classic' ? interleave([custom, original(key)]) : custom) : original(key)
     }
     const pressed = this.state.last[`${this.thread}/${pack.id}`]
     const taskKey = `${this.task?.scenario ?? 'general'}:${[...this.task?.signals ?? []].sort().join(',')}`

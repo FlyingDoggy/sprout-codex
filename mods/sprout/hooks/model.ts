@@ -223,7 +223,7 @@ export async function readModel($: EngineInterface, host: Host = claude) {
   const index = isLineLive ? line.index : (hostBucket?.index ?? Math.floor(now / AUTO_LINE_MS) + Number.parseInt(hashOf(today), 36))
   const silence = t('……', '…')
   const said = pool.length === 0 ? silence : (pool[index % pool.length]?.text ?? silence)
-  const chosen = host.chooseLine?.({ text: said, key: lineKey, moodKey, index, now, streak, original: bucket => linesFor(poolFor(bucket, streak), context).map(line => line.text) }) ?? said
+  const chosen = host.chooseLine?.({ text: said, key: lineKey, moodKey, index, now, streak, today, exhausted: windows.some(w => w.limit.pct >= 100), original: bucket => linesFor(poolFor(bucket, streak), context).map(line => line.text) }) ?? said
   const text = host.say?.(chosen) ?? chosen
 
   return {

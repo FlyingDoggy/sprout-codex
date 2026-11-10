@@ -18,7 +18,8 @@ import { ACTIONS, codexHost, interact, loadPet, observe } from './pet'
 import type { Action } from './pet'
 import { findCodex, limitsOf, readRateLimits } from './quota'
 import { atlasHtml, panelHtml } from './view'
-import { DialogueEngine } from './dialogue'
+import { GeneratedDialogueEngine } from './generated-dialogue'
+import { codexDialogueProvider } from './dialogue-provider'
 import { listPersonalities, selectPersonality } from './personality-config'
 
 type Json = Record<string, any>
@@ -44,9 +45,9 @@ const host = codexHost([
   join(dataDir, 'openai-prices.json'),
 ])
 const tail = createTailer(codexHome)
-const dialogue = new DialogueEngine(dataDir)
-host.chooseLine = choice => dialogue.chooseLine(choice)
 const codex = findCodex()
+const dialogue = new GeneratedDialogueEngine(dataDir, codexDialogueProvider(codex, codexHome))
+host.chooseLine = choice => dialogue.chooseLine(choice)
 let quotaAt = 0
 
 /** Codex names the chat in the metadata of a tool call. The newest rollout file is never taken for the current chat. */

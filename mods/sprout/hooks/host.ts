@@ -3,6 +3,7 @@ import type { Mood } from './logic'
 
 export type LineChoice = {
   text: string; key: SproutBucket; moodKey: SproutBucket; index: number; now: number; streak: number
+  today?: string; exhausted?: boolean
   original(bucket: SproutBucket): string[]
 }
 

@@ -5,14 +5,15 @@ import { createHash } from 'node:crypto'
 import { dayAt, zeroTokens, type Tokens, type Usage, type UsageDay } from '../model'
 import { readJson, writeJson } from './storage'
 import { estimateCost, type Prices } from './pricing'
+import { activityOf, consumeActivity, freshActivity, type ActivityState } from './activity'
 
 export type { Prices } from './pricing'
 type Event = { key: string; timestamp: number; model: string; tokens: Tokens; requestInput: number | null; serviceTier: string | null }
 type FileScan = {
   size: number; mtime: number; offset: number; model: string; serviceTier: string | null; previous: Tokens;
-  events: Event[]; quota: Usage['lastQuota'];
+  events: Event[]; quota: Usage['lastQuota']; activity: ActivityState;
 }
-type Cache = { version: 2; files: Record<string, FileScan> }
+type Cache = { version: 4; files: Record<string, FileScan> }
 const KEYS = ['input', 'cached', 'cacheWrite', 'output', 'reasoning', 'total'] as const
 const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
 
@@ -25,9 +26,10 @@ export function tokenUsage(raw: any): Tokens | null {
 }
 
 export function consumeLine(scan: FileScan, line: string) {
-  if (!line.includes('token_count') && !line.includes('turn_context')) return
+  if (!/token_count|turn_context|session_meta|task_started|task_complete|turn_aborted|item_completed|compacted/.test(line)) return
   let record: any
   try { record = JSON.parse(line) } catch { return }
+  consumeActivity(scan.activity, record)
   const payload = record.payload
   if (record.type === 'turn_context') {
     if (typeof payload?.model === 'string') scan.model = payload.model
@@ -54,7 +56,7 @@ export function consumeLine(scan: FileScan, line: string) {
   scan.previous = total
 }
 
-export const freshScan = (): FileScan => ({ size: 0, mtime: 0, offset: 0, model: 'unknown', serviceTier: null, previous: zeroTokens(), events: [], quota: null })
+export const freshScan = (): FileScan => ({ size: 0, mtime: 0, offset: 0, model: 'unknown', serviceTier: null, previous: zeroTokens(), events: [], quota: null, activity: freshActivity() })
 
 async function* walk(root: string): AsyncGenerator<string> {
   let entries
@@ -139,15 +141,15 @@ export function aggregate(scans: FileScan[], timezone: string, prices: Prices = 
   return { days: sorted, totals, firstDay: sorted[0]?.day ?? null, files: scans.length, unpricedModels: [...unpriced].sort(), models: [...models.values()].sort((a, b) => b.tokens - a.tokens), costAssumptions, warnings: [], lastQuota }
 }
 
-export async function scanUsage(codexHome: string, dataDir: string, timezone: string, prices: Prices = {}): Promise<Usage> {
+export async function scanUsage(codexHome: string, dataDir: string, timezone: string, prices: Prices = {}) {
   const cachePath = join(dataDir, 'usage-cache.json')
-  const old = await readJson<Cache>(cachePath, { version: 2, files: {} })
-  const next: Cache = { version: 2, files: {} }
+  const old = await readJson<Cache>(cachePath, { version: 4, files: {} })
+  const next: Cache = { version: 4, files: {} }
   const warnings: string[] = []
   for (const root of ['sessions', 'archived_sessions']) {
     try {
       for await (const file of walk(join(codexHome, root))) {
-        try { next.files[file] = await scanFile(file, old.version === 2 ? old.files[file] : undefined) }
+        try { next.files[file] = await scanFile(file, old.version === 4 ? old.files[file] : undefined) }
         catch { warnings.push('有会话记录暂时无法读取，统计可能不完整。') }
       }
     } catch { warnings.push('有会话目录无法读取，请检查本机文件权限。') }
@@ -155,5 +157,6 @@ export async function scanUsage(codexHome: string, dataDir: string, timezone: st
   await writeJson(cachePath, next)
   const usage = aggregate(Object.values(next.files), timezone, prices)
   usage.warnings = [...new Set(warnings)]
-  return usage
+  const activityStates = Object.values(next.files).map(file => file.activity)
+  return { ...usage, activity: activityOf(activityStates), activityStates }
 }

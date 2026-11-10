@@ -21,17 +21,32 @@ export type GithubData = {
   mergesComplete: boolean;
   mergesFrom?: string; latestMerge?: { number: number; at: number } | null;
 }
-export type PetAction = 'feed' | 'pat' | 'roast'
+export const PET_ACTIONS = ['feed', 'pat', 'roast', 'pray', 'cat'] as const
+export type PetAction = typeof PET_ACTIONS[number]
+export type PanelContext = { threadId?: string; cwd?: string }
+export type WorkEvent = 'compact' | 'test_failed' | 'test_passed' | 'done' | 'interrupted' | 'approval'
+export type Activity = {
+  active: number; agents: number; startedAt: number | null; planning: boolean;
+  event: { kind: WorkEvent; at: number; failures: number } | null;
+}
+export type SceneEffect = 'rain' | 'pray' | 'umbrella' | 'hide' | 'burp' | 'guard' | 'cup' | 'compact' | 'agents' | 'flower' | 'return' | 'blanket' | 'fail' | null
 export type Pet = {
   fed: number; patted: number; highest: number; action: 'feed' | 'pat' | null; actionAt: number;
   line?: SproutLine | null; initialized?: boolean; levelUpUntil?: number;
   lastMergeAt?: number; party?: { number: number; until: number } | null;
+  burst?: { action: 'feed' | 'pat'; count: number; at: number };
+  prayed?: number; prayerAt?: number; cat?: { until: number; day: string }; nextCatAt?: number;
+  lastSeenAt?: number; returnUntil?: number;
+  quotaSeen?: Record<string, { used: number; at: number; resetsAt: number | null }>;
+  rainUntil?: number;
 }
 export type Dashboard = {
   version: 1; updatedAt: number; today: string; timezone: string;
   usage: Omit<Usage, 'lastQuota'>; quota: Quota; pet: Pet;
   pricing: PricingInfo;
   github: GithubData | null; githubStatus: string | null; demo: boolean;
+  activity?: Activity;
+  context?: PanelContext; projectName?: string | null;
 }
 export const zeroTokens = (): Tokens => ({ input: 0, cached: 0, cacheWrite: 0, output: 0, reasoning: 0, total: 0 })
 export function dayAt(timestamp: number, timezone: string): string {

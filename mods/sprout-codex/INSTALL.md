@@ -54,6 +54,10 @@ node mods/sprout-codex/scripts/install-codex.mjs
 
 看到「喂水」「摸摸」「再嘴一句」三个按钮，就可以用了。第一次读取历史记录可能需要稍等一会儿。
 
+额度紧张时可以点天空的云向 Tibo 求雨；CatGPT 来访时可以点猫。也可以在对话中说「小苗求雨」或「叫 CatGPT 来串门」。
+
+点击场景左下角的等级条，可打开成长图鉴，查看九种形态、解锁进度和升级预估。右上角显示当前聊天的项目文件夹名，点击可刷新数据。
+
 ## 按需开启
 
 ### 订阅额度
@@ -96,6 +100,7 @@ node mods/sprout-codex/scripts/install-codex.mjs
 |---|---|
 | 装好后仍找不到小苗 | 重开 Codex，在插件列表中查找「Muyu · 小苗」来源下的「小苗 · Codex」，确认已启用。终端也可运行 `codex plugin list` 检查。 |
 | 只在对话中出现卡片 | 点击卡片展开图标。侧栏不会在所有客户端版本中自动展开。 |
+| Dots 入口一直停在加载画面 | 当前仍有加载问题；先在普通 Codex 会话打开小苗。 |
 | 更新后还是旧界面 | 完全退出并重开 Codex，再打开小苗；面板刷新按钮不会重新加载插件代码。 |
 | 暂无额度 | 检查 `codex login status`，确认 CLI 已登录订阅账号，再让 Codex 刷新小苗。 |
 | 没有 GitHub 图表 | 检查 `gh auth status --hostname github.com`，登录后重新加载插件。 |

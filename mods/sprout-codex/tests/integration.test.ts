@@ -24,7 +24,7 @@ test('MCP stdio handshake, dashboard data, UI resource and pet action work end t
     assert.deepEqual(tools.tools.find(tool => tool.name === 'sprout_status')?._meta?.['openai/ui'], { entrypoints: [{ type: 'thread' }, { type: 'global' }] })
     const status = await client.callTool({ name: 'sprout_status', arguments: {} })
     assert.equal((status.structuredContent as any).demo, true)
-    const resource = await client.readResource({ uri: 'ui://sprout/dashboard-v3.html' })
+    const resource = await client.readResource({ uri: 'ui://sprout/dashboard-v4.html' })
     assert.ok('text' in resource.contents[0])
     assert.match(resource.contents[0].text, /小苗/)
     assert.equal(resource.contents[0].mimeType, 'text/html;profile=mcp-app')
@@ -34,6 +34,14 @@ test('MCP stdio handshake, dashboard data, UI resource and pet action work end t
     assert.equal((roast.structuredContent as any).fed, 13)
     assert.equal((roast.structuredContent as any).patted, 28)
     assert.ok((roast.structuredContent as any).line)
+    const prayer = await client.callTool({ name: 'sprout_interact', arguments: { action: 'pray' } })
+    assert.equal((prayer.structuredContent as any).prayed, 1)
+    assert.equal((prayer.structuredContent as any).fed, 13)
+    const cat = await client.callTool({ name: 'sprout_interact', arguments: { action: 'cat' } })
+    assert.equal((cat.structuredContent as any).line.bucket, 'cat')
+    assert.ok((cat.structuredContent as any).cat.until > Date.now())
+    const after = await client.callTool({ name: 'sprout_status', arguments: {} })
+    assert.deepEqual((after.structuredContent as any).quota, (status.structuredContent as any).quota)
     assert.doesNotMatch(resource.contents[0].text, /不是订阅账单|成长值不受下方时间筛选影响|价格来源与模型明细/)
     const invalid = await client.callTool({ name: 'sprout_interact', arguments: { action: 'delete' } })
     assert.equal(invalid.isError, true)
@@ -44,19 +52,34 @@ test('stdio plugin calculates historical costs and retains pet state across proc
   const root = await mkdtemp(join(tmpdir(), 'sprout-restart-'))
   try {
     await mkdir(join(root, 'archived_sessions'))
+    await mkdir(join(root, 'sessions'))
     await writeFile(join(root, 'archived_sessions/history.jsonl'), [
+      { type: 'session_meta', payload: { id: 'alpha', cwd: '/work/Audi BI PoC', source: 'cli' } },
       { type: 'turn_context', payload: { model: 'gpt-6.1-sol' } },
       { timestamp: '2025-01-01T00:00:00Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 1_000_000, cached_input_tokens: 500_000, output_tokens: 100_000 } } } },
     ].map(row => JSON.stringify(row)).join('\n') + '\n')
+    const now = Date.now()
+    await writeFile(join(root, 'sessions/beta.jsonl'), [
+      { type: 'session_meta', payload: { id:'beta', cwd:'/work/Unrelated', source:'cli' } },
+      { type:'event_msg', timestamp:new Date(now-1000).toISOString(), payload:{type:'task_started',turn_id:'beta-turn'} },
+      { type:'event_msg', timestamp:new Date(now).toISOString(), payload:{type:'item_completed',item:{id:'failed-test',type:'CommandExecution',command:['/bin/zsh','-lc','npm test'],exit_code:1}} },
+    ].map(row=>JSON.stringify(row)).join('\n')+'\n')
     for (let run = 0; run < 2; run++) {
       const client = new Client({ name: 'sprout-restart', version: '1.0.0' })
       const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('dist/cli.js'), 'mcp'], env: { SPROUT_CODEX_HOME: root, SPROUT_DATA_DIR: join(root, 'state'), SPROUT_GITHUB: '0', SPROUT_LIVE_QUOTA: '0', SPROUT_PRICE_REFRESH: '0' }, stderr: 'pipe' })
       try {
         await client.connect(transport)
-        const { structuredContent: d } = await client.callTool({ name: 'sprout_status', arguments: {} })
+        const { structuredContent: d } = await client.callTool({ name: 'sprout_status', arguments: {}, _meta:{'x-codex-turn-metadata':JSON.stringify({thread_id:'alpha'})} })
         assert.equal((d as any).usage.totals.total, 1_100_000)
         assert.equal((d as any).usage.totals.costUsd, 2.05)
         assert.equal((d as any).pet.fed, run)
+        assert.equal((d as any).projectName, 'Audi BI PoC')
+        assert.equal((d as any).activity.active, 0)
+        assert.equal((d as any).activity.event, null)
+        assert.equal((d as any).usage.activityStates, undefined)
+        const other = await client.callTool({name:'sprout_status',arguments:{threadId:'beta'}})
+        assert.equal((other.structuredContent as any).projectName, 'Unrelated')
+        assert.equal((other.structuredContent as any).activity.event.kind, 'test_failed')
         if (run === 0) await client.callTool({ name: 'sprout_interact', arguments: { action: 'feed' } })
       } finally { await client.close() }
     }

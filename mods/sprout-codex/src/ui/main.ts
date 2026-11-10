@@ -1,5 +1,6 @@
 import { App } from '@modelcontextprotocol/ext-apps'
-import type { Dashboard, Pet, QuotaWindow } from '../model'
+import { PET_ACTIONS, type Dashboard, type Pet, type QuotaWindow, type PanelContext } from '../model'
+import { openGrowth, refreshGrowth } from './growth'
 import { BUBBLE_ROWS, BUBBLE_UNITS, sceneSvg } from '../core/scene'
 import { setLang } from '../core/i18n'
 import { capsuleSvg, tilesSvg, trendSvg, usageHeatmapSvg, githubHeatmapSvg, mergesSvg } from '../core/panels'
@@ -10,6 +11,7 @@ import { esc } from '../core/svg-kit'
 setLang('zh')
 const root = document.getElementById('app')!
 let dashboard: Dashboard | null = null
+let panelContext: PanelContext = {}
 let range: '30' | 'all' = '30'
 try { if (localStorage.getItem('sprout-range') === 'all') range = 'all' } catch {}
 let busy = false
@@ -19,6 +21,7 @@ let app: App | undefined
 let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 let playedIntro = false
 let drawingWidth = 0
+let lastSceneMarkup = ''
 const embedded = window.parent !== window
 document.documentElement.dataset.theme = theme
 
@@ -70,9 +73,31 @@ function quotaText(w: QuotaWindow, d: Dashboard) {
   return { label, reset, sentence }
 }
 
+function sceneMarkup(d: Dashboard, width: number) {
+  const pet = companion(d)
+  return { pet, markup: sceneSvg({ width, mood: pet.mood, action: pet.action, isConfetti: pet.isConfetti,
+    level: d.pet.highest, pips: pipsFor(d.pet.highest, d.usage.totals.total), isDay: pet.hour >= 7 && pet.hour < 19,
+    rows: wrapText(pet.text, BUBBLE_UNITS, BUBBLE_ROWS).rows, isPop: pet.isPop,
+    effect: pet.effect, cat: pet.showCat, canPray: pet.canPray, agents: pet.agents }) }
+}
+function refreshScene() {
+  if (!dashboard || document.hidden) return
+  const element = root.querySelector<HTMLElement>('.pet-scene')
+  if (!element) return
+  const { pet, markup } = sceneMarkup(dashboard, Number(element.dataset.width))
+  if (markup === lastSceneMarkup) return
+  const focus = document.activeElement?.getAttribute('data-action')
+  element.innerHTML = markup
+  element.setAttribute('aria-label', `小苗，Lv${dashboard.pet.highest}：${pet.text}`)
+  element.title = `${pet.text}\n累计 ${formatTokens(dashboard.usage.totals.total)} Token`
+  lastSceneMarkup = markup
+  if (focus) element.querySelector<SVGElement>(`[data-action="${focus}"]`)?.focus({ preventScroll: true })
+}
+
 function render() {
   if (!dashboard) return
   const focus = (document.activeElement as HTMLElement)?.id
+  const sceneFocus = document.activeElement?.getAttribute('data-action')
   const d = dashboard
   const available = Math.min(512, root.clientWidth) - 32
   // Upstream draws in terminal cell coordinates, then fits the SVG to the desktop pane.
@@ -85,7 +110,8 @@ function render() {
   const cached = days.reduce((sum, day) => sum + day.cached, 0)
   const cost = days.some(day => day.costUsd === null) ? null : days.reduce((sum, day) => sum + (day.costUsd ?? 0), 0)
   const knownCost = days.reduce((sum, day) => sum + day.knownCostUsd, 0)
-  const pet = companion(d)
+  const { pet, markup: scene } = sceneMarkup(d, width)
+  lastSceneMarkup = scene
   const allDays = d.usage.days.map(day => ({ day: day.day, tokens: day.total, costUsd: day.costUsd ?? 0 }))
   const chartDays = calendar(allDays, from, d.today)
   const last10 = calendar(allDays, addDays(d.today, -9), d.today)
@@ -109,10 +135,10 @@ function render() {
   const section = (heading: string, right: string, body: string) => `<section><div class="section-head"><h2>${heading}</h2>${right}</div>${body}</section>`
   const chart = (source: string | null | { svg: string }, label: string) => `<div class="chart" role="img" aria-label="${esc(label)}">${svg(source)}</div>`
   updatePanel(`<main>
-    <header><span class="dot" aria-hidden="true"></span><h1>小苗</h1><button class="refresh" id="refresh" title="${time(d.updatedAt)} 更新 · 点击刷新" aria-label="刷新" ${busy ? 'disabled' : ''}>Codex</button></header>
+    <header><span class="dot" aria-hidden="true"></span><h1>小苗</h1><button class="refresh" id="refresh" title="${esc(d.projectName??'')} · ${time(d.updatedAt)} 更新 · 点击刷新" aria-label="刷新" ${busy ? 'disabled' : ''}>${esc(d.projectName??'')}</button></header>
     ${d.demo ? '<p class="note demo">演示</p>' : ''}
     <div class="companion">
-      <div class="pet-scene" role="img" aria-label="小苗，Lv${d.pet.highest}：${esc(pet.text)}" title="${esc(pet.text)}&#10;累计 ${formatTokens(d.usage.totals.total)} Token">${sceneSvg({ width, mood: pet.mood, action: pet.action, isConfetti: pet.isConfetti, level: d.pet.highest, pips: pipsFor(d.pet.highest, d.usage.totals.total), isDay: pet.hour >= 7 && pet.hour < 19, rows: wrapText(pet.text, BUBBLE_UNITS, BUBBLE_ROWS).rows, isPop: pet.isPop })}</div>
+      <div class="pet-scene" role="group" data-width="${width}" aria-label="小苗，Lv${d.pet.highest}：${esc(pet.text)}" title="${esc(pet.text)}&#10;累计 ${formatTokens(d.usage.totals.total)} Token">${scene}</div>
       <div class="pet-actions"><button id="feed" ${busy ? 'disabled' : ''}>喂水</button><button id="pat" ${busy ? 'disabled' : ''}>摸摸</button><button id="roast" ${busy ? 'disabled' : ''}>再嘴一句</button></div>
       ${errorText ? `<p class="error" role="status">${esc(errorText)}</p>` : ''}
     </div>
@@ -124,11 +150,13 @@ function render() {
     ${gh?.days.length ? section('GitHub 贡献', `<span class="note">过去一年 ${gh.total.toLocaleString()} 次</span>`, chart(githubHeatmapSvg(width, gh.days[0].day, gh.days.map(day => day.level).join(''), d.today, isIntro), 'GitHub 贡献热力图')) : ''}
   </main>`)
   if (focus) document.getElementById(focus)?.focus({ preventScroll: true })
+  else if (sceneFocus) root.querySelector<SVGElement>(`[data-action="${sceneFocus}"]`)?.focus({ preventScroll: true })
+  refreshGrowth(d)
 }
 
 async function call(name: string, args: Record<string, unknown> = {}): Promise<any> {
   if (app) {
-    const result = await app.callServerTool({ name, arguments: args })
+    const result = await app.callServerTool({ name, arguments: { ...panelContext, ...args } })
     if (result.isError) throw new Error(result.content?.find(c => c.type === 'text')?.text ?? '暂时无法读取小苗')
     return result.structuredContent
   }
@@ -140,29 +168,37 @@ async function call(name: string, args: Record<string, unknown> = {}): Promise<a
 async function refresh(force = false) {
   if (busy) return
   busy = true
-  try { dashboard = await call('sprout_status', { refresh: force }); errorText = '' }
+  try { dashboard = await call('sprout_status', { refresh: force }); panelContext = dashboard?.context ?? panelContext; errorText = '' }
   catch (error: any) {
     errorText = error.message
     if (!dashboard) root.innerHTML = `<main><div class="loading"><p class="error">${esc(errorText)}</p><button id="refresh">重试</button></div></main>`
   } finally { busy = false; render() }
 }
 root.addEventListener('click', async event => {
-  const id = (event.target as HTMLElement).closest('button')?.id
+  const target = (event.target as Element).closest<HTMLElement>('button,[data-action]')
+  const id = target?.dataset.action ?? target?.id
+  if (id === 'gallery' && dashboard) openGrowth(dashboard)
   if (id === 'range30' || id === 'rangeAll') {
     range = id === 'range30' ? '30' : 'all'
     try { localStorage.setItem('sprout-range', range) } catch {}
     render()
   }
   if (id === 'refresh') await refresh(true)
-  if ((id === 'feed' || id === 'pat' || id === 'roast') && dashboard && !busy) {
+  if (id && PET_ACTIONS.some(action => action === id) && dashboard && !busy) {
     busy = true
     root.querySelectorAll<HTMLButtonElement>('.pet-actions button').forEach(button => { button.disabled = true })
     try {
       dashboard.pet = await call('sprout_interact', { action: id }) as Pet
       errorText = ''
-      clearTimeout(actionTimer); actionTimer = setTimeout(render, id === 'feed' ? 1900 : 1300)
+      clearTimeout(actionTimer); actionTimer = setTimeout(refreshScene, id === 'pray' ? 4100 : 2900)
     } catch (error: any) { errorText = error.message }
     finally { busy = false; render() }
+  }
+})
+root.addEventListener('keydown', event => {
+  const target = (event.target as Element).closest('[data-action]')
+  if (target && (event.key === 'Enter' || event.key === ' ')) {
+    event.preventDefault(); target.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   }
 })
 let resize: ReturnType<typeof setTimeout>
@@ -171,14 +207,15 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
 
 async function start() {
   if (embedded) {
-    app = new App({ name: 'Sprout Codex', version: '0.3.1' }, {})
-    app.ontoolresult = result => { const data = result.structuredContent as Dashboard | undefined; if (data?.version === 1) { dashboard = data; render() } }
+    app = new App({ name: 'Sprout Codex', version: '0.4.0' }, {})
+    app.ontoolresult = result => { const data = result.structuredContent as Dashboard | undefined; if (data?.version === 1) { dashboard = data; panelContext=data.context??panelContext; render() } }
     app.onhostcontextchanged = context => { if (context.theme) { theme = context.theme; document.documentElement.dataset.theme = theme; render() } }
     await app.connect()
     const context = app.getHostContext()
     if (context?.theme) { theme = context.theme; document.documentElement.dataset.theme = theme }
   }
   await refresh()
-  setInterval(() => { if (!document.hidden) void refresh() }, 60_000)
+  setInterval(() => { if (!document.hidden) void refresh() }, 15_000)
+  setInterval(refreshScene, 1000)
 }
 void start().catch(() => { root.innerHTML = '<main><p class="error">小苗连接失败，请重新打开面板</p></main>' })

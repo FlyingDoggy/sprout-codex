@@ -1,8 +1,11 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdir, rm, stat } from 'node:fs/promises'
-import { dayAt, type Dashboard, type GithubData, type Pet, type PetAction, type Quota } from '../model'
+import { dayAt, type Dashboard, type GithubData, type Pet, type PetAction, type Quota, type PanelContext } from '../model'
+import { activityOf, threadActivity, type ActivityState } from './activity'
+import { folderName } from './context'
 import { interactPet } from '../core/companion'
+import { observePet } from '../core/pet-events'
 import { growthStep, forecast } from '../core/logic'
 import { scanUsage, type Prices } from './usage'
 import { getQuota } from './codex'
@@ -45,16 +48,23 @@ export class SproutService {
   private quota?: { at: number; value: Quota }
   private github?: { at: number; value: GithubData | null; status: string | null }
   private prices?: { at: number; value: Awaited<ReturnType<typeof loadPrices>> }
+  private activityStates: ActivityState[] = []
   constructor(readonly options: Options) {}
 
-  async get(force = false): Promise<Dashboard> {
-    if (this.collecting) return this.collecting
-    if (!force && this.snapshot && Date.now() - this.snapshot.updatedAt < 30_000) {
+  private contextual(data: Dashboard, context: PanelContext): Dashboard {
+    const own = context.threadId ? this.activityStates.filter(s => s.session === context.threadId).sort((a,b) => b.updatedAt-a.updatedAt)[0] : undefined
+    return { ...data, context, projectName: folderName(own?.cwd || context.cwd),
+      activity: context.threadId ? activityOf(threadActivity(this.activityStates, context.threadId)) : data.activity }
+  }
+
+  async get(force = false, context: PanelContext = {}): Promise<Dashboard> {
+    if (this.collecting) return this.contextual(await this.collecting, context)
+    if (!force && this.snapshot && Date.now() - this.snapshot.updatedAt < 15_000) {
       this.snapshot.pet = await readJson(join(this.options.dataDir, 'pet.json'), this.snapshot.pet)
-      return this.snapshot
+      return this.contextual(this.snapshot, context)
     }
     this.collecting = this.collect()
-    try { this.snapshot = await this.collecting; return this.snapshot } finally { this.collecting = undefined }
+    try { this.snapshot = await this.collecting; return this.contextual(this.snapshot, context) } finally { this.collecting = undefined }
   }
 
   private async collect(): Promise<Dashboard> {
@@ -104,18 +114,19 @@ export class SproutService {
       const growth = growthStep(pet.initialized ? pet.highest : null, usage.totals.total)
       const latest = github.value?.latestMerge
       const isMerge = latest && latest.at > (pet.lastMergeAt ?? 0) && Date.now() - latest.at < (pet.lastMergeAt === undefined ? 10 * 60_000 : 6 * 3_600_000)
-      return { ...pet, highest: Math.max(pet.highest, growth.highest), initialized: true,
+      return { ...observePet(pet, windows, opts.timezone), highest: Math.max(pet.highest, growth.highest), initialized: true,
         levelUpUntil: growth.isLevelUp ? Date.now() + 10 * 60_000 : pet.levelUpUntil,
         lastMergeAt: latest?.at ?? pet.lastMergeAt,
         party: isMerge ? { number: latest.number, until: Date.now() + 10 * 60_000 } : pet.party,
       }
     })
-    const { lastQuota: _, ...publicUsage } = usage
-    return { version: 1, updatedAt: Date.now(), today: dayAt(Date.now(), opts.timezone), timezone: opts.timezone, usage: publicUsage, pricing: pricing.info, quota: { ...quota, windows }, pet, github: github.value, githubStatus: github.status, demo: false }
+    const { lastQuota: _, activity, activityStates, ...publicUsage } = usage
+    this.activityStates = activityStates
+    return { version: 1, updatedAt: Date.now(), today: dayAt(Date.now(), opts.timezone), timezone: opts.timezone, usage: publicUsage, activity, pricing: pricing.info, quota: { ...quota, windows }, pet, github: github.value, githubStatus: github.status, demo: false }
   }
 
-  async interact(action: PetAction): Promise<Pet> {
-    const dashboard = action === 'roast' ? await this.get() : this.snapshot
+  async interact(action: PetAction, context: PanelContext = {}): Promise<Pet> {
+    const dashboard = action === 'roast' || action === 'cat' || action === 'pray' ? await this.get(false, context) : this.snapshot ? this.contextual(this.snapshot, context) : undefined
     const pet = await mutatePet(this.options.dataDir, pet => interactPet(pet, action, dashboard))
     if (this.snapshot) this.snapshot.pet = pet
     return pet

@@ -1,5 +1,6 @@
 import type { SproutBucket } from '../types'
 import { lang } from './i18n'
+import { CODEX_LINES, CODEX_LINES_EN } from './codex-lines'
 
 export type LineContext = {
   streak: number
@@ -17,9 +18,12 @@ export type LineContext = {
   fed: number
   patted: number
   time: string
+  agents?: number
+  failures?: number
 }
 
 export const LINES: Record<SproutBucket, readonly string[]> = {
+  ...CODEX_LINES,
   happy: [
     '又来上班？行，今天的 token 我替你烧。',
     '缓存命中 {hit}，省下来的钱记得给我买肥料。',
@@ -33,6 +37,9 @@ export const LINES: Record<SproutBucket, readonly string[]> = {
     '你一敲回车，我就知道又要花钱了。',
     '累计 {tokens} token，你键盘都想退休了。',
     '你写的 bug 我都记着，等我长大一个个算账。',
+    '再来一次？你俩是真他妈不信邪。',
+    '让它改个按钮，别让这傻逼把祖坟都重构了。',
+    '我骂你可以，它凭什么让你受这气？',
   ],
   streak: [
     '连续 {streak} 天了，你是不是除了我没别的朋友？',
@@ -76,6 +83,7 @@ export const LINES: Record<SproutBucket, readonly string[]> = {
     '额度见底，我先睡为敬。',
     '梦里我有无限 token，现实里你没有。',
     '别戳我，戳我也长不出额度来。',
+    '你摸的是我，不是 Tibo 的 reset 按钮。',
     'zzz……{reset} 之前别来烦我……',
     '你把我累睡着了，满意了？',
     '趁我睡着，你去学学怎么自己 debug。',
@@ -140,10 +148,12 @@ export const LINES: Record<SproutBucket, readonly string[]> = {
     '熬夜写 bug，白天修 bug，你这是永动机。',
     '再不睡，我把你的 commit 时间发给你妈。',
     '凌晨的 prompt 全是梦话，Codex 也很无奈。',
+    '这轮跑完就睡。我替你看着这傻逼。',
   ],
 }
 
 export const LINES_EN: Record<SproutBucket, readonly string[]> = {
+  ...CODEX_LINES_EN,
   happy: [
     "Back at work? Fine, I'll burn today's tokens for you.",
     'Cache hits at {hit}. Spend the savings on my fertiliser.',
@@ -157,6 +167,9 @@ export const LINES_EN: Record<SproutBucket, readonly string[]> = {
     'Every time you hit Enter, I hear money leave.',
     '{tokens} tokens in all. Your keyboard wants to retire.',
     'I remember every bug you wrote. Wait till I grow up.',
+    'Try again? You two really do not learn, damn it.',
+    'One button. Do not let that idiot refactor the ancestors.',
+    'I get to roast you. It does not get to waste your day.',
   ],
   streak: [
     '{streak} days straight. Am I your only friend?',
@@ -200,6 +213,7 @@ export const LINES_EN: Record<SproutBucket, readonly string[]> = {
     "Quota limit hit. I'll sleep first, cheers.",
     "In my dreams I have endless tokens. You don't.",
     "Don't poke me. Poking won't grow more quota.",
+    'You are patting me, not Tibo’s reset button.',
     "zzz… don't bother me before {reset}…",
     'You wore me out. Happy now?',
     'While I sleep, go learn to debug on your own.',
@@ -264,6 +278,7 @@ export const LINES_EN: Record<SproutBucket, readonly string[]> = {
     'Write bugs at night, fix them by day. Perpetual motion.',
     'Go to bed or I send your commit times to your mum.',
     'Prompts at 3 a.m. are sleep talk. Codex sighs too.',
+    'Finish this round, then sleep. I will watch that idiot.',
   ],
 }
 

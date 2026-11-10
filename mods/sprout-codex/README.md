@@ -2,14 +2,20 @@
 
 Sprout 的 Codex 适配版。复用 [QingqiShi 的小苗](https://github.com/QingqiShi/claude/tree/main/mods/sprout)像素宠物和 SVG 图表，通过 Codex 管理的本机 stdio 插件提供 MCP App 面板。正式使用不需要启动 HTTP 服务或保留一个终端。
 
+**第一次安装：[看安装教程](INSTALL.md)**，可以直接把安装指令复制给 Codex，也可以跟着终端步骤操作。教程包含打开侧栏、更新和卸载。
+
 ## 安装到 Codex
 
 需要 Node.js 22 或更新版本，以及支持本地插件的 Codex。仓库包含已打包的 `dist/`，安装和运行不需要 npm 依赖。
 
 ```sh
+git clone --depth 1 --branch codex/sprout-port https://github.com/FlyingDoggy/sprout-codex.git
+cd sprout-codex
 cd mods/sprout-codex
 node scripts/install-codex.mjs
 ```
+
+已有仓库时，使用 [教程里的更新步骤](INSTALL.md#更新)。
 
 安装器把必要的发布文件复制到 `~/.codex/plugins/sources/muyu-sprout/`，注册本地来源，并安装 `sprout-codex@muyu-sprout`。不会复制开发依赖、使用日志或个人数据。已安装插件通过 Codex 缓存加载，更新代码后再次执行安装器即可刷新。
 

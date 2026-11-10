@@ -1,5 +1,7 @@
 > **Codex 适配版：** 本 fork 新增 [小苗 · Codex](mods/sprout-codex/README.md)，支持历史 Token 成长、官方 API 价格估算和 MCP App 面板。使用 Node.js 22+ 执行 `node mods/sprout-codex/scripts/install-codex.mjs` 安装，由 Codex 管理插件进程，无需常驻网页服务。下面保留上游 Claude 配置说明；使用 Codex 版无需运行根目录的 bootstrap 脚本。
 
+**安装 Codex 版：[中文安装教程](mods/sprout-codex/INSTALL.md)** · 复制给 Codex 安装 / 手动安装 / 更新 / 卸载
+
 [English](README.md) | 中文
 
 <p align="center">

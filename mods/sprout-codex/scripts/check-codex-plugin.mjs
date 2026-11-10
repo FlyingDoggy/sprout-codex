@@ -14,7 +14,7 @@ const codexHome = join(scratch, 'codex-home')
 await mkdir(plugin, { recursive: true })
 await mkdir(codexHome)
 await mkdir(join(marketplace, '.agents/plugins'), { recursive: true })
-for (const path of ['.codex-plugin', '.mcp.json', 'dist', 'skills', 'package.json', 'README.md']) await cp(join(root, path), join(plugin, path), { recursive: true })
+for (const path of ['.codex-plugin', '.mcp.json', 'dist', 'skills', 'package.json', 'README.md', 'INSTALL.md']) await cp(join(root, path), join(plugin, path), { recursive: true })
 const marketplacePath = join(marketplace, '.agents/plugins/marketplace.json')
 await writeFile(marketplacePath, JSON.stringify({ name: 'sprout-smoke', plugins: [{ name: 'sprout-codex', source: { source: 'local', path: './plugins/sprout-codex' }, policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' }, category: 'Productivity' }] }))
 

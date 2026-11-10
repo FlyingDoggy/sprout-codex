@@ -10,7 +10,7 @@ const source = join(codexHome, 'plugins/sources/muyu-sprout')
 const plugin = join(source, 'plugins/sprout-codex')
 // Stage only distributable files. Never copy development logs, user statistics or node_modules.
 await mkdir(plugin, { recursive: true })
-for (const file of ['.codex-plugin/plugin.json', 'dist/cli.js', 'dist/ui.html', 'skills/sprout/SKILL.md', 'package.json', 'README.md', 'NOTICE.md']) {
+for (const file of ['.codex-plugin/plugin.json', 'dist/cli.js', 'dist/ui.html', 'skills/sprout/SKILL.md', 'package.json', 'README.md', 'INSTALL.md', 'NOTICE.md']) {
   const target = join(plugin, file)
   await mkdir(dirname(target), { recursive: true })
   await cp(join(root, file), `${target}.tmp`)

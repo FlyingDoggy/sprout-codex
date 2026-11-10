@@ -13,6 +13,7 @@ import { readGithub } from './github'
 import { readJson, writeJson } from './storage'
 import { loadPrices } from './pricing'
 import { DialogueEngine } from './dialogue'
+import { codexDialogueProvider } from './dialogue-provider'
 import { listPersonalities } from './personality-config'
 import { personalityCommand } from './personality-cli'
 
@@ -53,7 +54,7 @@ export class SproutService {
   private prices?: { at: number; value: Awaited<ReturnType<typeof loadPrices>> }
   private activityStates: ActivityState[] = []
   private dialogue: DialogueEngine
-  constructor(readonly options: Options) { this.dialogue = new DialogueEngine(options.dataDir) }
+  constructor(readonly options: Options) { this.dialogue = new DialogueEngine(options.dataDir, codexDialogueProvider(options.binary, options.codexHome)) }
 
   private async contextual(data: Dashboard, context: PanelContext): Promise<Dashboard> {
     const own = context.threadId ? this.activityStates.filter(s => s.session === context.threadId).sort((a,b) => b.updatedAt-a.updatedAt)[0] : undefined
@@ -140,6 +141,7 @@ export class SproutService {
     const dashboard = action === 'roast' || action === 'cat' || action === 'pray' ? await this.get(false, context) : this.snapshot ? await this.contextual(this.snapshot, context) : undefined
     const pet = await mutatePet(this.options.dataDir, pet => interactPet(pet, action, dashboard))
     if (this.snapshot) this.snapshot.pet = pet
+    if (dashboard && pet.line) await this.dialogue.decorate({ ...dashboard, pet }, pet.line.bucket)
     return pet
   }
 }

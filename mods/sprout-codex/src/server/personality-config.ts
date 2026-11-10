@@ -31,7 +31,14 @@ export function parsePersona(input: unknown, id: string): PersonaPack {
 
 export const personalityConfigSchema = z.object({
   schemaVersion: z.literal(1).default(1), persona: z.string().regex(/^[a-z0-9_-]{1,60}$/).default('classic'),
-}).passthrough() // Preserve settings from the LLM branch without interpreting them.
+  generation: z.object({
+    enabled: z.boolean().default(false), provider: z.literal('codex').default('codex'),
+    model: z.string().min(1).max(100).default('gpt-6-luna'), binary: z.string().min(1).optional(),
+    minIntervalMs: z.number().int().min(60_000).max(86_400_000).default(15 * 60_000),
+    maxBatchesPerDay: z.number().int().min(1).max(100).default(12),
+    timeoutMs: z.number().int().min(1000).max(60_000).default(45_000),
+  }).default({ enabled: false, provider: 'codex', model: 'gpt-6-luna', minIntervalMs: 900_000, maxBatchesPerDay: 12, timeoutMs: 45_000 }),
+}).strict()
 export type PersonalityConfig = z.infer<typeof personalityConfigSchema>
 export const preferenceSchema = z.object({
   id: z.string().regex(/^[a-z0-9_-]{1,80}$/), text: z.string().min(1).max(400),

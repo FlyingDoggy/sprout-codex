@@ -9,7 +9,7 @@
 把下面这段话复制给 Mac 上的 Codex：
 
 ```text
-帮我安装小苗 Codex 版：从 https://github.com/FlyingDoggy/sprout-codex.git 克隆 codex/sprout-personality 分支到 ~/Projects/sprout-codex。先检查 Node.js 22+、Git，以及支持 plugin 命令的 Codex CLI。已有仓库就检查来源和本地修改，再用 git pull --ff-only 更新。
+帮我安装小苗 Codex 版：从 https://github.com/FlyingDoggy/sprout-codex.git 克隆 codex/sprout-llm 分支到 ~/Projects/sprout-codex。先检查 Node.js 22+、Git，以及支持 plugin 命令的 Codex CLI。已有仓库就检查来源和本地修改，再用 git pull --ff-only 更新。
 
 在仓库根目录运行 node mods/sprout-codex/scripts/install-codex.mjs，检查 sprout-codex@muyu-sprout 已安装并启用。只使用这个安装器。完成后提醒我完全退出并重新打开 Codex，再说“打开小苗”。
 ```
@@ -37,14 +37,14 @@ codex plugin --help
 
 ```sh
 mkdir -p "$HOME/Projects"
-git clone --depth 1 --branch codex/sprout-personality https://github.com/FlyingDoggy/sprout-codex.git "$HOME/Projects/sprout-codex"
+git clone --depth 1 --branch codex/sprout-llm https://github.com/FlyingDoggy/sprout-codex.git "$HOME/Projects/sprout-codex"
 cd "$HOME/Projects/sprout-codex"
 node mods/sprout-codex/scripts/install-codex.mjs
 ```
 
 看到 `Added plugin` 和 `小苗已安装` 即完成安装。发布包已经包含运行文件，不用运行 `npm install` 或构建命令。
 
-目前 Codex 版在 **`codex/sprout-personality` 分支**，上面的克隆命令已经指定。若目标目录已经存在，先确认它是这个仓库，再按下方「更新」操作。
+目前 Codex 版在 **`codex/sprout-llm` 分支**，上面的克隆命令已经指定。若目标目录已经存在，先确认它是这个仓库，再按下方「更新」操作。
 
 ### 3. 打开小苗
 

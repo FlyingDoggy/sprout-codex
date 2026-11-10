@@ -86,24 +86,3 @@ test('menu lists validated local packs without reading or exposing private prefe
   await assert.rejects(personalityCommand(dir,['use','../tester']))
   assert.deepEqual(await readJson(join(dir,'personality.json'),null),before)
 }))
-
-test('static branch ignores enabled generation settings and caches left by the LLM branch', async () => setup(async dir => {
-  const legacy = { schemaVersion:1,persona:'delivery',generation:{enabled:true,binary:'/must/not/run',model:'unused'} }
-  await writeJson(join(dir,'personality.json'),legacy)
-  await writeJson(join(dir,'dialogue-cache.json'),{version:1,entries:[{lines:['不该出现的模型台词。','缓存也不能覆盖静态词库。']}]})
-  const engine = new DialogueEngine(dir)
-  for(let i=0;i<3;i++) {
-    const d=await engine.decorate(demoDashboard())
-    assert.deepEqual(d.dialogue?.pools.happy,DELIVERY_PERSONA.pools.happy)
-  }
-  assert.equal(await readJson(join(dir,'dialogue-status.json'),null),null)
-  await personalityCommand(dir,['use','classic'])
-  assert.deepEqual((await readJson<any>(join(dir,'personality.json'),null)).generation,legacy.generation)
-}))
-
-test('static personality management cannot enable generation', async () => setup(async dir => {
-  await configure(dir)
-  const before=await readJson(join(dir,'personality.json'),null)
-  await assert.rejects(personalityCommand(dir,['generation','on']))
-  assert.deepEqual(await readJson(join(dir,'personality.json'),null),before)
-}))

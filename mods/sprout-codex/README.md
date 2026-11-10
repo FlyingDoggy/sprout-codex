@@ -1,19 +1,19 @@
 # 小苗 · Codex
 
-**当前分支：`codex/sprout-personality`。** 在移植基线上增加可插拔静态人设、任务场景和热切换，不包含模型生成器。 [三个版本的区别](BRANCHES.md)。
+**当前分支：`codex/sprout-llm`。** 在可插拔人设版上增加后台模型补句与缓存；生成默认关闭。 [三个版本的区别](BRANCHES.md)。
 
 Sprout 的 Codex 适配版。复用 [QingqiShi 的小苗](https://github.com/QingqiShi/claude/tree/main/mods/sprout)像素宠物和 SVG 图表，通过 Codex 管理的本机 stdio 插件提供 MCP App 面板。正式使用不需要启动 HTTP 服务或保留一个终端。
 
 **第一次安装：[看安装教程](INSTALL.md)**，可以直接把安装指令复制给 Codex，也可以跟着终端步骤操作。教程包含打开侧栏、更新和卸载。
 
-**可替换静态人设：[人设说明](PERSONALITY.md)**。人设与个人偏好单独存放；本分支不包含模型生成器。
+**可替换人设与可选订阅生成：[人设说明](PERSONALITY.md)**。默认静态台词，模型生成开关关闭；人设与个人偏好单独存放。
 
 ## 安装到 Codex
 
 需要 Node.js 22 或更新版本，以及支持本地插件的 Codex。仓库包含已打包的 `dist/`，安装和运行不需要 npm 依赖。
 
 ```sh
-git clone --depth 1 --branch codex/sprout-personality https://github.com/FlyingDoggy/sprout-codex.git
+git clone --depth 1 --branch codex/sprout-llm https://github.com/FlyingDoggy/sprout-codex.git
 cd sprout-codex
 cd mods/sprout-codex
 node scripts/install-codex.mjs
@@ -75,7 +75,9 @@ MCP Apps 兼容客户端可显示交互面板；已声明对话侧面板与全�
 
 ## 与原版的对应
 
-0.5.1 增加可插拔人设与右上角菜单，修复三个按钮的台词串台和重复轮换，保留图表动效。本分支只有静态人设。人设用法见 [PERSONALITY.md](PERSONALITY.md)。
+0.6.0 在静态人设版上增加可替换的模型提供方、系统提示词、后台生成与缓存。生成开关默认关闭；这部分代码只在 LLM 分支维护。
+
+0.5.1 增加可插拔静态人设与右上角菜单，保留串台修复和图表动效。人设用法见 [PERSONALITY.md](PERSONALITY.md)。
 
 0.4.0 增加的 Codex 场景互动继续保留原版的布局、三个按钮和成长门槛：
 
@@ -109,7 +111,7 @@ MCP Apps 兼容客户端可显示交互面板；已声明对话侧面板与全�
 - GitHub 过去一年贡献、历史合并 PR 和增删行数（跟随 30 天/全部筛选）；每 30 分钟缓存更新。
 - 只覆盖本机保留的 Codex JSONL 记录，不等于整个账号或其他设备的用量。删除日志后可统计范围会相应缩小，宠物最高等级保留。
 - 日志扫描读取文件，但只保留用量、时间戳、模型、额度、工作事件状态与项目定位信息；不缓存或返回提示词、回复正文、命令输出或 PR 标题。项目名仅用于本机面板。
-- 额度查询通过 Codex 自己的登录状态发起，插件不读取或传输登录凭据。本分支不发起模型调用。GitHub 查询通过本机 `gh` 发起。
+- 额度查询通过 Codex 自己的登录状态发起，插件不读取或传输登录凭据。默认不发起模型调用；另行开启台词生成才会通过官方 CLI 使用订阅额度。GitHub 查询通过本机 `gh` 发起。
 - 本版没有启用原版 Buddy 手机同步，不向 Buddy 上传数据。
 
 ## 官方 API 价格估算
